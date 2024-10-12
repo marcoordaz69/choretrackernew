@@ -1,0 +1,62 @@
+# Dependencies
+node_modules/
+/.pnp
+.pnp.js
+
+# Testing
+/coverage
+
+# Production
+/build
+
+# Misc
+.DS_Store
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDEs and editors
+/.idea
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
+.vscode/*
+
+# Cache directories
+.cache/
+*.cache
+client/.cache/
+server/.cache/
+
+# Specific problematic directories
+client/node_modules/
+server/node_modules/
+
+# Large binary files
+*.exe
+*.bin
+*.pack
+
+# Audio files
+*.raw
+
+# Specific files
+raw_audio.raw
+raw_message.bin
+temp_audio.raw
+test_audio.raw
+test_audio_converted.raw
+test_audio_original.raw
+
+# ffmpeg specific
+**/ffmpeg.exe

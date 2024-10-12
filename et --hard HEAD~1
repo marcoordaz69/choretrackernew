@@ -1,0 +1,144 @@
+[33mcommit 9a538ab3782c4c4786f0b45e2e2578c3140b00ad[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m
+Author: marcoordaz69 <33532975+marcoordaz69@users.noreply.github.com>
+Date:   Mon Oct 7 11:14:22 2024 -0700
+
+    Update project to latest state
+
+[33mcommit ca2cf8d83348dbb054519bec24b4d3db2d8b0480[m
+Author: marcoordaz69 <33532975+marcoordaz69@users.noreply.github.com>
+Date:   Fri Oct 4 01:28:11 2024 -0700
+
+    Update ThemeContext with new calendar day styling and save entire project
+
+[33mcommit 39b60ea90376cedfe3427fa44cfa4ee0a091aaa7[m
+Author: marcoordaz69 <33532975+marcoordaz69@users.noreply.github.com>
+Date:   Thu Oct 3 17:16:05 2024 -0700
+
+    Update .gitignore and remove unnecessary files from tracking
+
+[33mcommit ca6c48240a98187f0427ada45f20c45b83d5c4cf[m
+Author: marcoordaz69 <33532975+marcoordaz69@users.noreply.github.com>
+Date:   Thu Oct 3 17:13:09 2024 -0700
+
+    Save entire project with TypeScript fixes
+
+[33mcommit 9f0ed99c86955918ee4de14846cf65d4d5249f05[m
+Author: marcoordaz69 <33532975+marcoordaz69@users.noreply.github.com>
+Date:   Thu Oct 3 09:35:25 2024 -0700
+
+    Remove node_modules from version control
+
+[33mcommit a4469beddba3bd1cef413a4e56baf65a6ef91f63[m
+Author: marcoordaz69 <33532975+marcoordaz69@users.noreply.github.com>
+Date:   Thu Oct 3 09:34:00 2024 -0700
+
+    Recovered work with stashed changes
+
+[33mcommit b82ae021cba156a766b9ec8a71fb592a1751d56f[m
+Author: marcoordaz69 <33532975+marcoordaz69@users.noreply.github.com>
+Date:   Thu Oct 3 09:25:06 2024 -0700
+
+    Initial commit: Set up React project with AllowanceTracker component
+
+[33mcommit b771ceb83de006f592c92f814a53a72286eb0b7f[m
+Author: marcoordaz69 <33532975+marcoordaz69@users.noreply.github.com>
+Date:   Thu Oct 3 09:23:01 2024 -0700
+
+    Initial commit: Set up React project with AllowanceTracker component
+
+[33mcommit e3e2c8e9fc51810bd8446eefda50d8de8f791682[m
+Author: marcoordaz69 <33532975+marcoordaz69@users.noreply.github.com>
+Date:   Thu Oct 3 08:14:04 2024 -0700
+
+    Initial commit: Set up React project with AllowanceTracker component
+
+[33mcommit e0c327d808c9b103b7343b135c09145f77f8669b[m
+Author: marcoordaz69 <33532975+marcoordaz69@users.noreply.github.com>
+Date:   Mon Sep 30 12:09:31 2024 -0700
+
+    Merge remote changes and resolve conflicts
+
+[33mcommit d6824133640e06ba958f556a8b53447f161033a1[m
+Merge: 5f0b4582 1d22a169
+Author: marcoordaz69 <33532975+marcoordaz69@users.noreply.github.com>
+Date:   Mon Sep 30 12:05:44 2024 -0700
+
+    draggable working
+
+[33mcommit 5f0b458208af89bbc375d7700c480632fcc7933b[m
+Author: marcoordaz69 <33532975+marcoordaz69@users.noreply.github.com>
+Date:   Mon Sep 30 04:56:53 2024 -0700
+
+    Update project files and revert to previous state
+
+[33mcommit 85d0660f8b0b07ed8e956c27931d4f6c38d2e3a6[m
+Author: marcoordaz69 <33532975+marcoordaz69@users.noreply.github.com>
+Date:   Sat Sep 28 18:51:50 2024 -0700
+
+    chatbot adding chores
+
+[33mcommit 8c9fdcc92a2ac44a1c00e875dc843e43f8c4027e[m
+Author: marcoordaz69 <33532975+marcoordaz69@users.noreply.github.com>
+Date:   Sat Sep 28 18:37:00 2024 -0700
+
+    chatbotworking
+
+[33mcommit 1d22a1697a59876c1c787688fdaee1dd7ca06ee9[m
+Author: marcoordaz69 <33532975+marcoordaz69@users.noreply.github.com>
+Date:   Sat Sep 21 11:29:09 2024 -0700
+
+    Create project-info.json
+
+[33mcommit 2e984f8ff6dd0b9f2111e84faac78b3f1f5c93d9[m[33m ([m[1;32mrecover-commits[m[33m)[m
+Author: marcoordaz69 <33532975+marcoordaz69@users.noreply.github.com>
+Date:   Mon Sep 16 09:16:52 2024 -0700
+
+    Update server.js with new changes
+
+[33mcommit 190bd5370c94df322f316c41804a0b732890454f[m
+Author: marcoordaz69 <33532975+marcoordaz69@users.noreply.github.com>
+Date:   Mon Sep 16 03:01:21 2024 -0700
+
+    currently voice is working
+
+[33mcommit 3b2fd635195bce7ac063afc3fb9d67bd511af267[m[33m ([m[1;32mnew-branch-name[m[33m)[m
+Author: marcoordaz69 <33532975+marcoordaz69@users.noreply.github.com>
+Date:   Sun Sep 15 22:30:12 2024 -0700
+
+    voice working but login failed
+
+[33mcommit dd4ce66803294858efa8de099838a7ed01673459[m[33m ([m[1;31morigin/new-branch-name[m[33m)[m
+Author: marcoordaz69 <33532975+marcoordaz69@users.noreply.github.com>
+Date:   Sun Sep 15 19:09:27 2024 -0700
+
+    speech to text setup
+
+[33mcommit 6f61f3c09cd15e9e9fb9aeb9c4d3ff5ad19ae2b6[m[33m ([m[1;32mbackup-current-state[m[33m)[m
+Author: marcoordaz69 <33532975+marcoordaz69@users.noreply.github.com>
+Date:   Sat Sep 14 15:24:46 2024 -0700
+
+    Add new features and changes
+
+[33mcommit 3df1db888461b7279aa134db3715630dced102a9[m[33m ([m[1;32mperfect-simple[m[33m)[m
+Author: marcoordaz69 <33532975+marcoordaz69@users.noreply.github.com>
+Date:   Fri Sep 13 11:53:33 2024 -0700
+
+    Update project to latest working state
+
+[33mcommit bcc7ac46a7e264716d23e2d1b402062380a8b955[m
+Author: marcoordaz69 <33532975+marcoordaz69@users.noreply.github.com>
+Date:   Fri Sep 13 11:33:12 2024 -0700
+
+    Update project to latest working state
+
+[33mcommit f5e93d5d4e67da478b7b346b3633dea2332e8e09[m
+Author: marcoordaz69 <33532975+marcoordaz69@users.noreply.github.com>
+Date:   Fri Sep 13 10:44:03 2024 -0700
+
+    Update project to latest working state
+
+[33mcommit 7853634e0e2d02bc5b7b756ca6c7201ec5096497[m
+Author: marcoordaz69 <33532975+marcoordaz69@users.noreply.github.com>
+Date:   Fri Sep 13 09:49:15 2024 -0700
+
+    Initial commit
