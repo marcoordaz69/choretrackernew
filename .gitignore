@@ -1,5 +1,6 @@
 # Dependencies
 node_modules/
+**/node_modules/
 /.pnp
 .pnp.js
 
@@ -34,13 +35,8 @@ yarn-error.log*
 
 # Cache directories
 .cache/
+**/.cache/
 *.cache
-client/.cache/
-server/.cache/
-
-# Specific problematic directories
-client/node_modules/
-server/node_modules/
 
 # Large binary files
 *.exe
@@ -60,3 +56,9 @@ test_audio_original.raw
 
 # ffmpeg specific
 **/ffmpeg.exe
+
+# Large files
+**/node_modules/.cache/default-development/*.pack
+
+# Ensure no large files in any directory
+**/*.{iso,tar,gz,zip,7z,rar,db,sqlite,bak,mdb,dll,pdb,so,dylib}
