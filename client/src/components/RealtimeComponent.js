@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { RealtimeClient } from '@openai/realtime-api-beta';
 import { WavRecorder } from '../lib/wavtools';
 import axios from 'axios';
-import { instructions } from '../utils/conversation_config.js';
+import { getConversationConfig } from '../utils/conversation_config.js';
 import { FaMicrophone } from 'react-icons/fa';
 
 const SAMPLE_RATE = 24000;
@@ -29,6 +29,7 @@ const RealtimeComponent = ({ theme, avatarId }) => {
   const [messages, setMessages] = useState([]);
   const [turnEndType, setTurnEndType] = useState('none');
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isWaitingForChores, setIsWaitingForChores] = useState(false);
   
   const audioRef = useRef(null);
   const clientRef = useRef(null);
@@ -43,7 +44,7 @@ const RealtimeComponent = ({ theme, avatarId }) => {
   useEffect(() => {
     const setupClient = async () => {
       try {
-        console.log('Setting up audio context and client');
+        console.log('[LOG] Setting up audio context and client');
         audioContextRef.current = createAudioContext();
         await registerAudioWorkletProcessor(audioContextRef.current);
 
@@ -56,22 +57,21 @@ const RealtimeComponent = ({ theme, avatarId }) => {
               }
         );
 
-        await clientRef.current.updateSession({
-          instructions: instructions,
-        });
+        const config = await getConversationConfig();
+        await clientRef.current.updateSession(config);
 
         console.log('Behavior instructions applied successfully');
 
         clientRef.current.addTool(
           {
             name: 'get_chores',
-            description: "Get the user's chores for a specific date, or for today if no date is specified",
+            description: "Get the user's chores for a specific date, or for today if no date is specified. Always use this function when asked about chores, regardless of any prior knowledge. let the user know you are looking up the specified day for chore information.",
             parameters: {
               type: 'object',
               properties: {
                 date: {
                   type: 'string',
-                  description: 'The date to get chores for in ISO 8601 format (YYYY-MM-DD)',
+                  description: 'The date to get chores for in ISO 8601 format (YYYY-MM-DD). If not provided, use today\'s date.',
                 },
               },
               required: [],
@@ -79,29 +79,18 @@ const RealtimeComponent = ({ theme, avatarId }) => {
           },
           async ({ date }) => {
             try {
-              // Fallback to today if date is not provided
-              const formattedDate = date || new Date().toISOString().split('T')[0];
-              console.log(`Fetching chores for date: ${formattedDate}`);
-
-              const response = await axios.post('/api/chat', { 
-                message: `What are the chores for ${formattedDate}?`,
-                avatarId: avatarId,
-              });
-
-              if (response.status === 200 && response.data.message) {
-                console.log('Chores successfully retrieved:', response.data.message);
-                return response.data.message;
-              } else {
-                throw new Error('Unexpected API response format or status');
-              }
+              console.log(`[LOG] get_chores function called with date: ${date}`);
+              const chores = await fetchChores(date);
+              console.log(`[LOG] Chores retrieved: ${JSON.stringify(chores)}`);
+              return JSON.stringify({ chores: chores });
             } catch (error) {
-              console.error('Error getting chores:', error);
-              return `Sorry, I couldn't retrieve the chores for ${date || "today"} due to: ${error.message}`;
+              console.error('[LOG] Error in get_chores function:', error);
+              return JSON.stringify({ error: error.message });
             }
           }
         );
 
-        console.log('Chore management tool added successfully');
+        console.log('[LOG] Chore management tool added successfully');
 
         wavRecorderRef.current = new WavRecorder({ sampleRate: SAMPLE_RATE });
 
@@ -115,7 +104,7 @@ const RealtimeComponent = ({ theme, avatarId }) => {
         await clientRef.current.connect();
         console.log('Connected to the Realtime API successfully');
       } catch (error) {
-        console.error('Error setting up the Realtime Client or applying instructions:', error);
+        console.error('[LOG] Error setting up the Realtime Client or applying instructions:', error);
       }
     };
 
@@ -132,25 +121,83 @@ const RealtimeComponent = ({ theme, avatarId }) => {
   }, [avatarId]);
 
   const handleConversationUpdate = async ({ item, delta }) => {
-    console.log('Conversation updated event received');
-    console.log('Full item:', item);
-    console.log('Delta:', delta);
+    console.log('[LOG] Conversation updated event received');
+    console.log('[LOG] Full item:', item);
+    console.log('[LOG] Delta:', delta);
 
-    if (delta?.content) {
-      console.log("Text response received:", delta.content);
-      setMessages(prev => [...prev, { id: prev.length + 1, text: delta.content, isAi: true }]);
-    }
+    if (delta?.function_call && delta.function_call.name === 'get_chores') {
+      console.log("[LOG] Get chores function call received:", delta.function_call);
+      setIsWaitingForChores(true);
 
-    if (delta?.audio && !isInterruptedRef.current) {
-      console.log("Audio response received, length:", delta.audio.length);
-      await queueAudioBuffer(delta.audio);
-    }
+      try {
+        const date = JSON.parse(delta.function_call.arguments).date || new Date().toISOString().split('T')[0];
+        const choresMessage = await fetchChores(date);
+        
+        console.log("[LOG] Chores fetched:", choresMessage);
 
-    if (delta?.function_call) {
-      console.log("Function call received:", delta.function_call);
-      // Log function call details
-      console.log("Function name:", delta.function_call.name);
-      console.log("Function arguments:", delta.function_call.arguments);
+        // Send function call output
+        await clientRef.current.sendMessage({
+          type: 'conversation.item.create',
+          item: {
+            type: 'function_call_output',
+            function_call_id: delta.function_call.id,
+            output: JSON.stringify({ chores: choresMessage })
+          }
+        });
+
+        console.log("[LOG] Function call output sent");
+
+        // Trigger new response for AI to analyze chores
+        await clientRef.current.sendMessage({
+          type: 'response.create'
+        });
+
+        console.log("[LOG] New response triggered");
+      } catch (error) {
+        console.error('[LOG] Error handling get_chores function call:', error);
+        setIsWaitingForChores(false);
+        // Send an error message to the user
+        await clientRef.current.sendMessage({
+          type: 'conversation.item.create',
+          item: {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'text', text: "lets see here im searching what i got?" }]
+          }
+        });
+      }
+    } else if (item?.type === 'function_call_output' && item.call_id === delta?.function_call?.id) {
+      // Process the chore data when it's received
+      try {
+        const choresData = JSON.parse(JSON.parse(item.output).chores);
+        console.log("[LOG] Processed chores data:", choresData);
+        
+        // Trigger a new response to present the chore data
+        await clientRef.current.sendMessage({
+          type: 'response.create',
+          response: {
+            choices: [{
+              message: {
+                content: `Here are your chores for the requested date: ${choresData.chores}`
+              }
+            }]
+          }
+        });
+      } catch (error) {
+        console.error('[LOG] Error processing chores data:', error);
+      }
+      setIsWaitingForChores(false);
+    } else if (!isWaitingForChores) {
+      // Only process non-function-call updates if we're not waiting for chores
+      if (delta?.content) {
+        console.log("[LOG] Text response received:", delta.content);
+        setMessages(prev => [...prev, { id: prev.length + 1, text: delta.content, isAi: true }]);
+      }
+
+      if (delta?.audio && !isInterruptedRef.current) {
+        console.log("[LOG] Audio response received, length:", delta.audio.length);
+        await queueAudioBuffer(delta.audio);
+      }
     }
   };
 
@@ -300,6 +347,30 @@ const RealtimeComponent = ({ theme, avatarId }) => {
       }
     } else {
       console.log('Conditions not met for interruption');
+    }
+  };
+
+  const fetchChores = async (date) => {
+    const formattedDate = date || new Date().toISOString().split('T')[0];
+    console.log(`[LOG] Fetching chores for date: ${formattedDate}`);
+
+    try {
+      const response = await axios.post('/api/chat', { 
+        message: `What are the chores for ${formattedDate}?`,
+        avatarId: avatarId,
+      });
+
+      console.log('[LOG] API response:', response.data);
+
+      if (response.status === 200 && response.data.message) {
+        console.log('[LOG] Chores successfully retrieved:', response.data.message);
+        return response.data.message;
+      } else {
+        throw new Error('Unexpected API response format or status');
+      }
+    } catch (error) {
+      console.error('[LOG] Error getting chores:', error);
+      throw error;
     }
   };
 

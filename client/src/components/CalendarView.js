@@ -1,10 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, parseISO, startOfWeek, addDays } from 'date-fns';
-import { ChevronLeftIcon, ChevronRightIcon, XIcon, CheckIcon } from 'lucide-react';
+import { ChevronLeftIcon, ChevronRightIcon, XIcon, CheckIcon, WandIcon } from 'lucide-react';
 import { useTheme } from './ThemeContext';
 
-const CalendarView = ({ chores, onDateClick, isEditMode, onDeleteChore, onClose }) => {
+const CalendarView = ({ chores, onDateClick, onDeleteChore, onClose }) => {
   const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [isEditMode, setIsEditMode] = useState(false);
   const { theme } = useTheme();
   const calendarRef = useRef(null);
 
@@ -23,6 +24,7 @@ const CalendarView = ({ chores, onDateClick, isEditMode, onDeleteChore, onClose 
 
   const nextMonth = () => setCurrentMonth(addMonths(currentMonth, 1));
   const prevMonth = () => setCurrentMonth(subMonths(currentMonth, 1));
+  const toggleEditMode = () => setIsEditMode(!isEditMode);
 
   const renderChores = (day) => {
     const dayOfWeek = format(day, 'EEEE');
@@ -95,9 +97,14 @@ const CalendarView = ({ chores, onDateClick, isEditMode, onDeleteChore, onClose 
           <h2 className={`text-2xl font-bold ${theme.text}`}>
             {format(currentMonth, 'MMMM yyyy')}
           </h2>
-          <button onClick={nextMonth} className={`p-2 ${theme.button} rounded-full`}>
-            <ChevronRightIcon className="w-6 h-6" />
-          </button>
+          <div className="flex items-center space-x-2">
+            <button onClick={toggleEditMode} className={`p-2 ${theme.button} rounded-full`}>
+              <WandIcon className="w-6 h-6" />
+            </button>
+            <button onClick={nextMonth} className={`p-2 ${theme.button} rounded-full`}>
+              <ChevronRightIcon className="w-6 h-6" />
+            </button>
+          </div>
         </div>
         <div className="grid grid-cols-7 gap-2">
           {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (

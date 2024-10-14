@@ -5,7 +5,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useParams, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import { Checkbox } from "../components/UI/checkbox";
-import { CalendarIcon, XIcon, SendIcon, ChevronDownIcon, ChevronUpIcon, Moon, Sun, LockIcon, PlusIcon, BarChartIcon, HomeIcon, MessageSquareIcon, DollarSignIcon, ActivityIcon,Save, RotateCcw } from "lucide-react";
+import { CalendarIcon, XIcon, SendIcon, ChevronDownIcon, ChevronUpIcon, Moon, Sun, LockIcon, PlusIcon, BarChartIcon, HomeIcon, MessageSquareIcon, DollarSignIcon, ActivityIcon,Save, RotateCcw, WandIcon } from "lucide-react";
 import Calendar from 'react-github-contribution-calendar';
 import { format, parse, parseISO, isValid, startOfMonth, endOfMonth, eachDayOfInterval } from 'date-fns';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "./UI/dialog";
@@ -592,17 +592,39 @@ const AvatarDashboard = ({ userId }) => {
       setLocalChores(chores);
     }, [chores]);
   
+    const handleDeleteChore = async (choreId, date) => {
+      try {
+        await axios.delete(`http://localhost:5000/api/chores/${avatarId}/${choreId}`);
+        setLocalChores(prevChores => {
+          const updatedChores = { ...prevChores };
+          updatedChores[date] = updatedChores[date].filter(chore => chore._id !== choreId);
+          return updatedChores;
+        });
+        // Optionally, you can call fetchChores() here to refresh all chores from the server
+      } catch (error) {
+        console.error('Error deleting chore:', error);
+      }
+    };
+  
     return (
       <Card className={`w-full h-full ${theme.secondary}`}>
         <CardHeader>
           <div className="flex justify-between items-center">
             <CardTitle className={`text-xs font-semibold ${theme.primary}`}>Weekly Objectives</CardTitle>
-            <button
-              onClick={() => setIsCalendarModalOpen(true)}
-              className={`p-1 rounded-full ${theme.button}`}
-            >
-              <CalendarIcon size={16} />
-            </button>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => setIsCalendarModalOpen(true)}
+                className={`p-1 rounded-full ${theme.button}`}
+              >
+                <CalendarIcon size={16} />
+              </button>
+              <button
+                onClick={() => setIsEditMode(!isEditMode)}
+                className={`p-1 rounded-full ${theme.button}`}
+              >
+                <WandIcon size={16} />
+              </button>
+            </div>
           </div>
         </CardHeader>
         <CardContent className="overflow-y-auto" style={{ maxHeight: 'calc(100% - 1.5rem)' }}>
@@ -629,19 +651,29 @@ const AvatarDashboard = ({ userId }) => {
                   <div className="space-y-1">
                     {dayChores.length > 0 ? (
                       (isExpanded ? dayChores : dayChores.slice(0, 2)).map((chore) => (
-                        <label 
-                          key={chore._id} 
-                          className="flex items-center space-x-1 text-xs"
-                        >
-                          <Checkbox
-                            checked={chore.completed || false}
-                            onCheckedChange={() => handleToggleChore(chore._id, date)}
-                            className={`w-3 h-3 ${theme.checkbox} rounded-sm`}
-                          />
-                          <span className={`truncate ${chore.completed ? `${theme.textMuted} line-through` : theme.text}`}>
-                            {chore.name}
-                          </span>
-                        </label>
+                        <div key={chore._id} className="flex items-center justify-between">
+                          <label className="flex items-center space-x-1 text-xs">
+                            <Checkbox
+                              checked={chore.completed || false}
+                              onCheckedChange={() => handleToggleChore(chore._id, date)}
+                              className={`w-3 h-3 ${theme.checkbox} rounded-sm`}
+                            />
+                            <span className={`truncate ${chore.completed ? `${theme.textMuted} line-through` : theme.text}`}>
+                              {chore.name}
+                            </span>
+                          </label>
+                          {isEditMode && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteChore(chore._id, date);
+                              }}
+                              className={`text-xs ${theme.button} p-0.5 rounded`}
+                            >
+                              <XIcon size={12} />
+                            </button>
+                          )}
+                        </div>
                       ))
                     ) : (
                       <p className={`text-xs ${theme.textMuted}`}>No objectives</p>
