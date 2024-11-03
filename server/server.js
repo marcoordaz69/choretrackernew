@@ -31,7 +31,16 @@ let dgConnection;
 const app = express();
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: process.env.NODE_ENV === 'production' 
+    ? ['https://my-chore-tracker-05ff5f942a24.herokuapp.com']
+    : ['http://localhost:3000'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  credentials: true,
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  exposedHeaders: ['Content-Range', 'X-Content-Range'],
+  maxAge: 600 // Cache preflight requests for 10 minutes
+}));
 app.use(express.json());
 app.use(morgan('dev'));
 
