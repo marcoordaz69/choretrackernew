@@ -47,13 +47,8 @@ app.get('/', (req, res) => {
   res.send('Welcome to My Chore Tracker!');
 });
 
-// Serve static files from the React build directory
-app.use(express.static(path.join(__dirname, '../client/build')));
-
-// Handle React routing, return all requests to React app
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '../client/build', 'index.html'));
-});
+// Serve static files from the uploads directory
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Enhanced logging middleware
 app.use((req, res, next) => {
