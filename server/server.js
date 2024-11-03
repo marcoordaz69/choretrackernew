@@ -34,7 +34,7 @@ const app = express();
 app.use(cors({
   origin: process.env.NODE_ENV === 'production' 
     ? ['https://my-chore-tracker-05ff5f942a24.herokuapp.com']
-    : ['http://localhost:3000'],
+    : ['http://localhost:5000'],
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   credentials: true,
   allowedHeaders: ['Content-Type', 'Authorization'],
