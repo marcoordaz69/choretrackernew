@@ -41,10 +41,19 @@ app.use('/api/family', familyRoutes);
 app.use('/api/chores', choresRoutes);
 app.use('/api/chat', chatRoutes); // Add this line if it's not already there
 app.use('/api', familyProgressRoutes);
- 
 
-// Serve static files from the uploads directory
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// Add welcome route
+app.get('/', (req, res) => {
+  res.send('Welcome to My Chore Tracker!');
+});
+
+// Serve static files from the React build directory
+app.use(express.static(path.join(__dirname, '../client/build')));
+
+// Handle React routing, return all requests to React app
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../client/build', 'index.html'));
+});
 
 // Enhanced logging middleware
 app.use((req, res, next) => {
