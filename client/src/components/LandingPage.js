@@ -4,10 +4,11 @@ import React, { useState, useEffect } from "react"
 import { Button } from "../components/UI/button"
 import { Input } from "../components/UI/input"
 import { Card, CardContent } from "../components/UI/card"
-import { CheckCircle, Users, Calendar, Sparkles, Star } from "lucide-react"
+import { CheckCircle, Users, Calendar, Sparkles, Star, Menu } from "lucide-react"
 
 export default function LandingPage() {
   const [scrollY, setScrollY] = useState(0)
+  const [isMenuOpen, setIsMenuOpen] = useState(false)
 
   useEffect(() => {
     const handleScroll = () => setScrollY(window.scrollY)
@@ -18,13 +19,21 @@ export default function LandingPage() {
   return (
     <div className="flex flex-col min-h-screen bg-gradient-to-b from-purple-50 to-blue-50">
       <header className="px-4 lg:px-6 h-14 flex items-center border-b bg-white/50 backdrop-blur-sm fixed w-full z-50">
-        <a className="flex items-center justify-center" href="#">
+        <a className="flex items-center justify-center shrink-0" href="#">
           <Sparkles className="h-6 w-6 text-purple-600" />
-          <span className="ml-2 text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-600 to-blue-600">
+          <span className="ml-2 text-xl md:text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-600 to-blue-600">
             FamilyChores
           </span>
         </a>
-        <nav className="ml-auto flex gap-4 sm:gap-6">
+        
+        <button 
+          className="ml-auto md:hidden p-2"
+          onClick={() => setIsMenuOpen(!isMenuOpen)}
+        >
+          <Menu className="h-6 w-6 text-purple-600" />
+        </button>
+
+        <nav className="hidden md:flex ml-auto gap-4 sm:gap-6">
           <a className="text-sm font-medium hover:text-purple-600 transition-colors" href="#features">
             Features
           </a>
@@ -45,6 +54,49 @@ export default function LandingPage() {
             <a href="/login">Login</a>
           </Button>
         </nav>
+
+        {isMenuOpen && (
+          <div className="absolute top-14 left-0 right-0 bg-white/95 backdrop-blur-sm border-b shadow-lg md:hidden">
+            <nav className="flex flex-col p-4 gap-4">
+              <a 
+                className="text-sm font-medium hover:text-purple-600 transition-colors" 
+                href="#features"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                Features
+              </a>
+              <a 
+                className="text-sm font-medium hover:text-purple-600 transition-colors" 
+                href="#how-it-works"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                How It Works
+              </a>
+              <a 
+                className="text-sm font-medium hover:text-purple-600 transition-colors" 
+                href="#testimonials"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                Testimonials
+              </a>
+              <a 
+                className="text-sm font-medium hover:text-purple-600 transition-colors" 
+                href="#pricing"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                Pricing
+              </a>
+              <Button 
+                variant="outline" 
+                className="border-purple-600 text-purple-600 hover:bg-purple-50 rounded-full px-4 py-1 shadow-sm transition-transform hover:scale-105 text-sm font-medium h-auto w-full"
+                asChild
+                onClick={() => setIsMenuOpen(false)}
+              >
+                <a href="/login">Login</a>
+              </Button>
+            </nav>
+          </div>
+        )}
       </header>
       <main className="flex-1">
         <section className="w-full py-12 md:py-24 lg:py-32 xl:py-48 relative overflow-hidden">
