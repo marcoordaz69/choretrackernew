@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { FaMicrophone } from 'react-icons/fa';
+import PremiumFeatureModal from './PremiumFeatureModal';
 
 const SAMPLE_RATE = 24000;
 
@@ -115,6 +116,8 @@ const RealtimeComponent = ({ theme, avatarId }) => {
   const [isRecording, setIsRecording] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isWaitingForChores, setIsWaitingForChores] = useState(false);
+  const [isPremiumModalOpen, setIsPremiumModalOpen] = useState(false);
+  const [hasPremiumAccess, setHasPremiumAccess] = useState(false); // Add this state for premium check
   
   const audioRef = useRef(null);
   const recorderRef = useRef(null);
@@ -144,6 +147,14 @@ const RealtimeComponent = ({ theme, avatarId }) => {
     source.start();
     setIsPlaying(true);
     source.onended = () => setIsPlaying(false);
+  };
+
+  const handleMicrophoneClick = async () => {
+    if (!hasPremiumAccess) {
+      setIsPremiumModalOpen(true);
+      return;
+    }
+    handleToggleAudio();
   };
 
   const handleToggleAudio = async () => {
@@ -211,8 +222,8 @@ const RealtimeComponent = ({ theme, avatarId }) => {
       </div>
       <div className="flex items-center justify-center">
         <button 
-          onClick={handleToggleAudio} 
-          className={`${theme.button} p-2 rounded-full`}
+          onClick={handleMicrophoneClick}
+          className={`${theme.button} p-2 rounded-full ${!hasPremiumAccess ? 'opacity-50 cursor-not-allowed' : ''}`}
           aria-label={isRecording ? 'Stop Recording' : 'Start Recording'}
         >
           <FaMicrophone 
@@ -223,6 +234,12 @@ const RealtimeComponent = ({ theme, avatarId }) => {
         </button>
       </div>
       <audio ref={audioRef} style={{ display: 'none' }} />
+
+      <PremiumFeatureModal
+        isOpen={isPremiumModalOpen}
+        onClose={() => setIsPremiumModalOpen(false)}
+        featureName="Voice Control"
+      />
     </div>
   );
 };

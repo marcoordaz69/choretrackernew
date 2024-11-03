@@ -2,10 +2,10 @@ const LOCAL_RELAY_SERVER_URL =
   process.env.REACT_APP_LOCAL_RELAY_SERVER_URL || '';
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { useParams, useLocation } from 'react-router-dom';
+import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { Checkbox } from "../components/UI/checkbox";
-import { CalendarIcon, XIcon, SendIcon, ChevronDownIcon, ChevronUpIcon, Moon, Sun, LockIcon, PlusIcon, BarChartIcon, HomeIcon, MessageSquareIcon, DollarSignIcon, ActivityIcon,Save, RotateCcw, WandIcon } from "lucide-react";
+import { CalendarIcon, XIcon, SendIcon, ChevronDownIcon, ChevronUpIcon, Moon, Sun, LockIcon, PlusIcon, BarChartIcon, HomeIcon, MessageSquareIcon, DollarSignIcon, ActivityIcon,Save, RotateCcw, WandIcon, UsersIcon } from "lucide-react";
 import Calendar from 'react-github-contribution-calendar';
 import { format, parse, parseISO, isValid, startOfMonth, endOfMonth, eachDayOfInterval } from 'date-fns';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "./UI/dialog";
@@ -67,6 +67,21 @@ const useResizeObserverFix = () => {
   }, []);
 };
 
+const FamilySelector = ({ theme }) => {
+  const navigate = useNavigate();
+
+  return (
+    <button
+      onClick={() => navigate('/family-profile')}
+      className={`fixed bottom-16 left-4 z-20 p-2 rounded-full ${theme.secondary} 
+        shadow-lg hover:shadow-xl transition-all hover:scale-110`}
+      title="Family Profile"
+    >
+      <UsersIcon size={24} className={theme.text} />
+    </button>
+  );
+};
+
 const AvatarDashboard = ({ userId }) => {
   useResizeObserverFix();
   const layoutRef = useRef(null);
@@ -100,18 +115,21 @@ const AvatarDashboard = ({ userId }) => {
   const [chatMessages, setChatMessages] = useState([]);
   const [currentMessage, setCurrentMessage] = useState('');
 
+  const defaultLayout = {
+    lg: [
+      { i: 'greeting', x: 4, y: 0, w: 4, h: 1 },
+      { i: 'contributionGraph', x: 4, y: 1, w: 4, h: 2 },
+      { i: 'weeklyCalendar', x: 2, y: 3, w: 8, h: 2.5 },
+      { i: 'chatInput', x: 10, y: 7, w: 2, h: 2 },
+      { i: 'allowanceTracker', x: 0, y: 0, w: 2, h: 3 },
+      { i: 'realtime', x: 9, y: 4, w: 1, h: 1 }  // Add this if you want the realtime component
+
+    ]
+  };
+
   const [layout, setLayout] = useState(() => {
     const savedLayout = localStorage.getItem('dashboardLayout');
-    return savedLayout ? JSON.parse(savedLayout) : {
-      lg: [
-        { i: 'greeting', x: 0, y: 0, w: 12, h: 1 },
-        { i: 'contributionGraph', x: 0, y: 1, w: 12, h: 3 },
-        { i: 'weeklyCalendar', x: 0, y: 4, w: 8, h: 2 },
-        { i: 'chatInput', x: 8, y: 4, w: 4, h: 2 },
-        { i: 'allowanceTracker', x: 0, y: 6, w: 6, h: 2 },
-        { i: 'realtime', x: 6, y: 6, w: 6, h: 4 }, // Added RealtimeComponent with more height
-      ]
-    };
+    return savedLayout ? JSON.parse(savedLayout) : defaultLayout;
   });
 
   const [isLayoutLocked, setIsLayoutLocked] = useState(true);
@@ -637,12 +655,12 @@ const AvatarDashboard = ({ userId }) => {
         { i: 'weeklyCalendar', x: 2, y: 3, w: 8, h: 2.5 },
         { i: 'chatInput', x: 10, y: 7, w: 2, h: 2 },
         { i: 'allowanceTracker', x: 0, y: 0, w: 2, h: 3 },
+        { i: 'realtime', x: 9, y: 4, w: 1, h: 1 }  // Add this if you want the realtime component
 
       ]
     };
     setLayout(defaultLayout);
     localStorage.setItem('dashboardLayout', JSON.stringify(defaultLayout));
-    // Optional: Add some visual feedback here, like a toast notification
     console.log('Layout reset to default');
   };
 
@@ -855,19 +873,11 @@ const AvatarDashboard = ({ userId }) => {
     return formatted;
   }, [chores]);
 
-  const memoizedLayout = useMemo(() => [
-    { i: 'greeting', x: 0, y: 0, w: 12, h: 1 },
-    { i: 'contributionGraph', x: 0, y: 1, w: 12, h: 4 },
-    { i: 'weeklyCalendar', x: 0, y: 5, w: 8, h: 2 },
-    { i: 'chatInput', x: 8, y: 5, w: 4, h: 2 },
-    { i: 'allowanceTracker', x: 0, y: 7, w: 6, h: 2 },
-    { i: 'realtime', x: 6, y: 7, w: 6, h: 2 }, // Added RealtimeComponent
-  ], []);
-
   useResizeObserverFix();
 
   return (
     <div className={`h-screen w-full ${theme.background}`}>
+      <FamilySelector theme={theme} />
       <LayoutControls 
         isLayoutLocked={isLayoutLocked}
         setIsLayoutLocked={setIsLayoutLocked}
@@ -903,10 +913,7 @@ const AvatarDashboard = ({ userId }) => {
         </div>
         <div key="allowanceTracker" style={{ display: hiddenComponents.allowanceTracker ? 'none' : 'block' }}>
           <Card className={`w-full h-full ${theme.secondary} rounded-xl overflow-hidden border-0`}>
-            <CardHeader className="py-0.5">
-              <CardTitle className={`text-xs font-semibold ${theme.primary}`}>Family Allowance Tracker</CardTitle>
-            </CardHeader>
-            <CardContent className="p-0.5 overflow-y-auto" style={{ maxHeight: 'calc(100% - 1.5rem)' }}>
+            <CardContent className="p-0.5 overflow-y-auto" style={{ maxHeight: 'calc(100% - 0.5rem)' }}>
               <AllowanceTracker choreUpdateTrigger={choreUpdateTrigger} chores={formattedChores} />
             </CardContent>
           </Card>
