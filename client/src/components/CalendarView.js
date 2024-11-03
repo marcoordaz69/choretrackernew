@@ -33,17 +33,40 @@ const CalendarView = ({ chores, onDateClick, onDeleteChore, onClose }) => {
     // Get chores for this specific date
     const dayChores = chores[dateString] || [];
     
-    // Get recurring chores for this day of the week
+    // Get recurring chores for this day of the week, but filter out duplicates
     const recurringChores = Object.values(chores)
       .flat()
-      .filter(chore => chore.isRecurring && chore.days && chore.days.includes(dayOfWeek));
+      .filter(chore => {
+        // Check if it's a recurring chore for this day
+        const isRecurringForToday = chore.isRecurring && chore.days && chore.days.includes(dayOfWeek);
+        
+        // Check if there's already a one-time chore with the same name on this date
+        const hasOneTimeVersion = dayChores.some(dayChore => 
+          !dayChore.isRecurring && dayChore.name === chore.name
+        );
 
-    // Combine one-time and recurring chores
-    const allChores = [...dayChores, ...recurringChores];
+        return isRecurringForToday && !hasOneTimeVersion;
+      });
 
-    return allChores.map((chore) => (
+    // Create a Map to track unique chores by name
+    const uniqueChores = new Map();
+    
+    // Process one-time chores first
+    dayChores.forEach(chore => {
+      uniqueChores.set(chore.name, chore);
+    });
+    
+    // Add recurring chores only if they don't already exist
+    recurringChores.forEach(chore => {
+      if (!uniqueChores.has(chore.name)) {
+        uniqueChores.set(chore.name, chore);
+      }
+    });
+
+    // Convert Map back to array and render
+    return Array.from(uniqueChores.values()).map((chore) => (
       <div
-        key={chore._id}
+        key={`${chore._id}-${chore.isRecurring ? 'recurring' : 'onetime'}`}
         className={`text-xs p-2 mb-1 rounded-full flex justify-between items-center shadow-sm ${
           chore.completed ? theme.completedChoreBubble : theme.choreBubble
         }`}

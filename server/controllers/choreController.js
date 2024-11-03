@@ -133,8 +133,9 @@ exports.addChore = async (req, res) => {
         return res.status(400).json({ message: 'Date is required for non-recurring chores' });
       }
       let formattedDate;
+      let parsedDate;
       try {
-        const parsedDate = parseISO(date);
+        parsedDate = parseISO(date);
         if (!isValid(parsedDate)) {
           throw new Error('Invalid date');
         }
@@ -146,7 +147,7 @@ exports.addChore = async (req, res) => {
       newChore = {
         name: choreName,
         date: formattedDate,
-        day: format(parseISO(formattedDate), 'EEEE'),
+        day: format(parsedDate, 'EEEE'),
         isRecurring: false,
         createdAt: new Date()
       };

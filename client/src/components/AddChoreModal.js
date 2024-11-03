@@ -17,6 +17,22 @@ const AddChoreModal = ({ isOpen, onClose, onAddChore, newChore, setNewChore, day
     }
   }, [isOpen, selectedDate, setNewChore]);
 
+  // Ensure daysOfWeek is initialized if undefined
+  useEffect(() => {
+    if (!newChore.daysOfWeek) {
+      setNewChore(prev => ({ ...prev, daysOfWeek: [] }));
+    }
+  }, [newChore, setNewChore]);
+
+  // Validation logic for user feedback
+  const handleAddChore = () => {
+    if (newChore.isRecurring && (!newChore.daysOfWeek || newChore.daysOfWeek.length === 0)) {
+      alert("Please select at least one day for the recurring chore.");
+      return;
+    }
+    onAddChore();
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className={`${theme.secondary} border border-${theme.accent} rounded-lg shadow-lg max-w-sm mx-auto p-4`}>
@@ -57,7 +73,7 @@ const AddChoreModal = ({ isOpen, onClose, onAddChore, newChore, setNewChore, day
                         daysOfWeek: prev.daysOfWeek.includes(day)
                           ? prev.daysOfWeek.filter(d => d !== day)
                           : [...prev.daysOfWeek, day]
-                      }))
+                      }));
                     }}
                     className={`px-2 py-1 text-xs rounded transition-colors ${
                       newChore.daysOfWeek.includes(day)
@@ -96,7 +112,7 @@ const AddChoreModal = ({ isOpen, onClose, onAddChore, newChore, setNewChore, day
             <X size={14} className="mr-1" /> Cancel
           </Button>
           <Button
-            onClick={onAddChore}
+            onClick={handleAddChore}
             className={`px-3 py-1 text-sm bg-${theme.accent} text-${theme.secondary} hover:bg-${theme.accentHover} transition duration-200`}
           >
             <Check size={14} className="mr-1" /> Add Chore

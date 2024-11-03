@@ -178,10 +178,14 @@ const AvatarDashboard = ({ userId }) => {
   const fetchChores = async () => {
     try {
       const response = await axios.get(`${process.env.REACT_APP_API_URL}/api/chores/${avatarId}`);
-      const { chores: fetchedChores, stats, completedChores } = response.data;
-      console.log('Fetched chores:', fetchedChores);
+      const { chores: fetchedChores, stats } = response.data;
 
       const choresByDate = {};
+      const today = new Date();
+      const thirtyDaysFromNow = new Date(today);
+      thirtyDaysFromNow.setDate(today.getDate() + 30);
+
+      // Process fetched chores
       Object.entries(fetchedChores).forEach(([day, dayChores]) => {
         if (!Array.isArray(dayChores)) {
           console.warn(`Invalid chores data for day ${day}:`, dayChores);
@@ -192,92 +196,75 @@ const AvatarDashboard = ({ userId }) => {
           try {
             // Handle recurring chores
             if (chore.isRecurring && Array.isArray(chore.days)) {
-              chore.days.forEach(recurringDay => {
-                const nextDate = getNextDayOccurrence(recurringDay);
-                const dateStr = format(nextDate, 'yyyy-MM-dd');
-                
-                if (!choresByDate[dateStr]) {
-                  choresByDate[dateStr] = [];
-                }
-                choresByDate[dateStr].push({
-                  ...chore,
-                  date: dateStr,
-                  recurringDay
-                });
-              });
-              return;
-            }
+              let currentDate = new Date(today);
 
-            // Handle one-time chores
-            let choreDate;
-            if (chore.date && isValid(parseISO(chore.date))) {
-              choreDate = format(parseISO(chore.date), 'yyyy-MM-dd');
-            } else if (day !== 'Unscheduled') {
-              // Try to parse the day name into a date
-              const parsedDate = parse(day, 'EEEE', new Date());
-              if (isValid(parsedDate)) {
-                choreDate = format(parsedDate, 'yyyy-MM-dd');
-              } else {
-                console.warn('Invalid day format:', day);
-                return;
+              while (currentDate <= thirtyDaysFromNow) {
+                const dayName = format(currentDate, 'EEEE');
+                
+                if (chore.days.includes(dayName)) {
+                  const dateStr = format(currentDate, 'yyyy-MM-dd');
+
+                  // Deduplication check: ensure only one instance per date
+                  if (!choresByDate[dateStr]?.some(existingChore => existingChore._id === chore._id)) {
+                    if (!choresByDate[dateStr]) {
+                      choresByDate[dateStr] = [];
+                    }
+
+                    choresByDate[dateStr].push({
+                      ...chore,
+                      date: dateStr,
+                      recurring: true,
+                      originalDay: dayName,
+                      instanceId: `${chore._id}-${dateStr}`
+                    });
+                  }
+                }
+
+                currentDate.setDate(currentDate.getDate() + 1);
               }
             } else {
-              console.warn('Chore has no valid date:', chore);
-              return;
-            }
+              // Handle one-time chores
+              let choreDate;
+              if (chore.date && isValid(parseISO(chore.date))) {
+                choreDate = format(parseISO(chore.date), 'yyyy-MM-dd');
+              } else if (day !== 'Unscheduled') {
+                const nextOccurrence = getNextDayOccurrence(day);
+                if (isValid(nextOccurrence)) {
+                  choreDate = format(nextOccurrence, 'yyyy-MM-dd');
+                }
+              }
 
-            if (!choresByDate[choreDate]) {
-              choresByDate[choreDate] = [];
+              if (choreDate) {
+                if (!choresByDate[choreDate]) {
+                  choresByDate[choreDate] = [];
+                }
+
+                choresByDate[choreDate].push({
+                  ...chore,
+                  date: choreDate,
+                  recurring: false
+                });
+              }
             }
-            choresByDate[choreDate].push({
-              ...chore,
-              date: choreDate
-            });
           } catch (err) {
             console.error('Error processing chore:', err, { chore, day });
           }
         });
       });
 
-      console.log('Processed chores by date:', choresByDate);
-
-      // Update states with the processed data
       setChoresByDate(choresByDate);
       setChores(choresByDate);
 
-      // Update today's stats from backend if available, otherwise calculate
-      if (stats) {
-        setTodayTotalChores(stats.totalChores);
-        setTodayCompletedChores(stats.completedChores);
-      } else {
-        updateTodayChores(choresByDate);
-      }
+      // Update today's stats
+      const todayStr = format(today, 'yyyy-MM-dd');
+      const todayChores = choresByDate[todayStr] || [];
+      setTodayTotalChores(todayChores.length);
+      setTodayCompletedChores(todayChores.filter(chore => chore.completed).length);
 
-      // Update calendar values for contribution graph
-      const calendarData = {};
-      Object.entries(choresByDate).forEach(([date, chores]) => {
-        if (chores.length > 0) {
-          const completedCount = chores.filter(chore => chore.completed).length;
-          const completionRate = completedCount / chores.length;
-          calendarData[date] = Math.round(completionRate * 4); // 0-4 scale
-        }
-      });
-      setCalendarValues(calendarData);
-
-      // Update current week view
-      setCurrentWeek(getCurrentWeek());
-      
-      // Trigger updates in dependent components
+      updateCalendarValues(choresByDate);
       setChoreUpdateTrigger(prev => prev + 1);
-
     } catch (error) {
-      console.error('Error fetching chores:', {
-        message: error.message,
-        response: error.response?.data,
-        status: error.response?.status
-      });
-      
-      // Reset all states on error
+      console.error('Error fetching chores:', error);
       setChoresByDate({});
       setChores({});
       setTodayTotalChores(0);
@@ -375,31 +362,65 @@ const AvatarDashboard = ({ userId }) => {
   };
 
   const handleToggleChore = async (choreId, date) => {
+    // Find current chore and its state
+    const currentChore = choresByDate[date]?.find(chore => chore._id === choreId);
+    if (!currentChore) {
+      console.error('Chore not found:', choreId);
+      return;
+    }
+
+    const newCompletedState = !currentChore.completed;
+
+    // Optimistically update both state objects
+    const updateState = (prevState) => {
+      const newState = { ...prevState };
+      if (newState[date]) {
+        newState[date] = newState[date].map(chore => 
+          chore._id === choreId 
+            ? { ...chore, completed: newCompletedState }
+            : chore
+        );
+      }
+      return newState;
+    };
+
+    // Update both states simultaneously
+    setChoresByDate(updateState);
+    setChores(updateState);
+
     try {
+      // Make API call with explicit completed state
       const response = await axios.post(`http://localhost:5000/api/chores/${avatarId}/toggle`, {
         choreId,
-        completed: !chores[date]?.find(chore => chore._id === choreId)?.completed
+        completed: newCompletedState // Send explicit new state
       });
 
-      // Update local state with the new data from the server
-      const { chores: updatedChores, completedChores } = response.data;
-      setChores(updatedChores);
-      setChoresByDate(updatedChores);
+      if (!response.data?.chores) {
+        throw new Error('Invalid server response');
+      }
+
+      // Update states with server data
+      const serverChores = response.data.chores;
+      setChoresByDate(serverChores);
+      setChores(serverChores);
+
+      // Update related UI elements
+      updateCalendarValues(serverChores);
       
-      // Update calendar values and today's stats
+      // Update today's stats
       const today = format(new Date(), 'yyyy-MM-dd');
-      const todayChores = updatedChores[today] || [];
+      const todayChores = serverChores[today] || [];
+      const completedCount = todayChores.filter(chore => chore.completed).length;
       setTodayTotalChores(todayChores.length);
-      setTodayCompletedChores(todayChores.filter(chore => chore.completed).length);
-      
-      updateCalendarValues(updatedChores);
-      
-      // Trigger AllowanceTracker update
+      setTodayCompletedChores(completedCount);
+
+      // Trigger allowance update
       setChoreUpdateTrigger(prev => prev + 1);
 
     } catch (error) {
       console.error('Error toggling chore:', error);
-      // Refresh all chores on error to ensure consistency
+      
+      // On error, fetch fresh data instead of manual reversion
       fetchChores();
     }
   };
@@ -677,26 +698,15 @@ const AvatarDashboard = ({ userId }) => {
   );
 
   const WeeklyCalendar = () => {
-    const [localChores, setLocalChores] = useState(chores);
-  
+    const [localChores, setLocalChores] = useState({});
+
+    // Update localChores whenever chores changes
     useEffect(() => {
-      setLocalChores(chores);
-    }, [chores]);
-  
-    const handleDeleteChore = async (choreId, date) => {
-      try {
-        await axios.delete(`http://localhost:5000/api/chores/${avatarId}/${choreId}`);
-        setLocalChores(prevChores => {
-          const updatedChores = { ...prevChores };
-          updatedChores[date] = updatedChores[date].filter(chore => chore._id !== choreId);
-          return updatedChores;
-        });
-        // Optionally, you can call fetchChores() here to refresh all chores from the server
-      } catch (error) {
-        console.error('Error deleting chore:', error);
+      if (choresByDate) {
+        setLocalChores(choresByDate);
       }
-    };
-  
+    }, [choresByDate]);
+
     return (
       <Card className={`w-full h-full ${theme.secondary}`}>
         <CardHeader>
@@ -724,6 +734,7 @@ const AvatarDashboard = ({ userId }) => {
               const dayChores = localChores[date] || [];
               const isExpanded = expandedDays[date];
               const formattedDate = format(parseISO(date), 'MMM-d');
+              
               return (
                 <div 
                   key={day} 
@@ -742,7 +753,7 @@ const AvatarDashboard = ({ userId }) => {
                   <div className="space-y-1">
                     {dayChores.length > 0 ? (
                       (isExpanded ? dayChores : dayChores.slice(0, 2)).map((chore) => (
-                        <div key={chore._id} className="flex items-center justify-between">
+                        <div key={chore._id || chore.instanceId} className="flex items-center justify-between">
                           <label className="flex items-center space-x-1 text-xs">
                             <Checkbox
                               checked={chore.completed || false}
@@ -770,10 +781,13 @@ const AvatarDashboard = ({ userId }) => {
                       <p className={`text-xs ${theme.textMuted}`}>No objectives</p>
                     )}
                     {!isExpanded && dayChores.length > 2 && (
-                      <p className={`text-xs ${theme.textMuted} cursor-pointer`} onClick={(e) => {
-                        e.stopPropagation();
-                        setExpandedDays(prev => ({ ...prev, [date]: true }));
-                      }}>
+                      <p 
+                        className={`text-xs ${theme.textMuted} cursor-pointer`} 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setExpandedDays(prev => ({ ...prev, [date]: true }));
+                        }}
+                      >
                         +{dayChores.length - 2} more
                       </p>
                     )}
