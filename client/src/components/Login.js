@@ -12,6 +12,7 @@ export default function Login() {
     password: ''
   });
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
 
   const handleInputChange = (e) => {
@@ -20,19 +21,44 @@ export default function Login() {
       ...prevState,
       [name]: value
     }));
+    setError(''); // Clear error when user types
   };
 
   const handleEmailLogin = async (e) => {
     e.preventDefault();
     setError('');
+    setIsLoading(true);
 
     try {
-      const response = await axios.post('/api/auth/login', formData, { timeout: 10000 });
-      console.log('Login successful:', response.data);
+      const response = await axios.post(`${process.env.REACT_APP_API_URL}/api/auth/login`, formData, { 
+        timeout: 10000,
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      console.log('Login response:', response.data);
       
-      localStorage.setItem('userId', response.data.user.id);
-      console.log('Stored user ID:', response.data.user.id);
+      if (response.data.token) {
+        localStorage.setItem('token', response.data.token);
+      }
       
+      if (response.data.user && response.data.user.id) {
+        localStorage.setItem('userId', response.data.user.id);
+        console.log('Stored userId:', response.data.user.id);
+      }
+
+      // Store any other relevant user data
+      if (response.data.user) {
+        localStorage.setItem('userData', JSON.stringify(response.data.user));
+      }
+
+      // Check if tokens and userId are stored correctly
+      const storedToken = localStorage.getItem('token');
+      const storedUserId = localStorage.getItem('userId');
+      console.log('Stored token:', storedToken);
+      console.log('Stored userId:', storedUserId);
+
       if (response.data.hasFamilyProfile) {
         navigate('/family-profile');
       } else {
@@ -40,13 +66,23 @@ export default function Login() {
       }
     } catch (error) {
       console.error('Login error:', error);
-      setError(error.response?.data?.message || 'Unable to connect to the server. Please try again later.');
+      if (error.response?.status === 401) {
+        setError('Invalid email or password');
+      } else if (error.code === 'ECONNABORTED') {
+        setError('Connection timed out. Please try again.');
+      } else if (!navigator.onLine) {
+        setError('No internet connection. Please check your connection and try again.');
+      } else {
+        setError('Unable to connect to the server. Please try again later.');
+      }
+    } finally {
+      setIsLoading(false);
     }
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-black">
-      <Card className="w-[300px] bg-zinc-900 text-white border-zinc-800">
+    <div className="flex items-center justify-center min-h-screen bg-black p-4">
+      <Card className="w-full max-w-[350px] bg-zinc-900 text-white border-zinc-800">
         <CardHeader>
           <CardTitle className="text-xl font-bold text-center">Log In</CardTitle>
         </CardHeader>
@@ -82,33 +118,52 @@ export default function Login() {
             </>
           ) : (
             <form onSubmit={handleEmailLogin} className="space-y-4">
-              <input
-                type="email"
-                name="email"
-                placeholder="Email"
-                required
-                className="w-full bg-zinc-800 text-white border border-zinc-700 rounded px-3 py-2"
-                value={formData.email}
-                onChange={handleInputChange}
-              />
-              <input
-                type="password"
-                name="password"
-                placeholder="Password"
-                required
-                className="w-full bg-zinc-800 text-white border border-zinc-700 rounded px-3 py-2"
-                value={formData.password}
-                onChange={handleInputChange}
-              />
-              {error && <p className="text-red-500 text-sm">{error}</p>}
-              <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white">
-                Log In
+              <div className="space-y-2">
+                <input
+                  type="email"
+                  name="email"
+                  placeholder="Email"
+                  required
+                  className="w-full bg-zinc-800 text-white border border-zinc-700 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={formData.email}
+                  onChange={handleInputChange}
+                  disabled={isLoading}
+                />
+                <input
+                  type="password"
+                  name="password"
+                  placeholder="Password"
+                  required
+                  className="w-full bg-zinc-800 text-white border border-zinc-700 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={formData.password}
+                  onChange={handleInputChange}
+                  disabled={isLoading}
+                />
+              </div>
+              {error && (
+                <div className="bg-red-500/10 border border-red-500/20 rounded p-2">
+                  <p className="text-red-500 text-sm text-center">{error}</p>
+                </div>
+              )}
+              <Button 
+                type="submit" 
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white relative"
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <div className="flex items-center justify-center">
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                  </div>
+                ) : (
+                  'Log In'
+                )}
               </Button>
               <Button 
                 type="button" 
                 variant="outline" 
                 className="w-full bg-zinc-800 hover:bg-zinc-700 text-white"
                 onClick={() => setShowEmailForm(false)}
+                disabled={isLoading}
               >
                 Back
               </Button>
