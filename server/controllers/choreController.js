@@ -1,5 +1,61 @@
 const User = require('../models/User');
-const { format, parseISO, isValid } = require('date-fns');
+const { format, parseISO, isValid, startOfDay, endOfDay } = require('date-fns');
+
+// Helper function to organize chores by date
+const organizeChoresByDate = (chores) => {
+  const organized = {};
+  
+  chores.forEach(chore => {
+    if (chore.isRecurring && Array.isArray(chore.days)) {
+      // For recurring chores, add them to each day they occur
+      chore.days.forEach(day => {
+        // Convert day name to next occurrence of that day
+        const nextDate = getNextDayOccurrence(day);
+        const dateStr = format(nextDate, 'yyyy-MM-dd');
+        
+        if (!organized[dateStr]) {
+          organized[dateStr] = [];
+        }
+        organized[dateStr].push({
+          ...chore.toObject(),
+          date: dateStr,
+          isRecurring: true,
+          recurringDay: day
+        });
+      });
+    } else if (chore.date && isValid(parseISO(chore.date))) {
+      // For one-time chores with valid dates
+      const dateStr = format(parseISO(chore.date), 'yyyy-MM-dd');
+      if (!organized[dateStr]) {
+        organized[dateStr] = [];
+      }
+      organized[dateStr].push({
+        ...chore.toObject(),
+        date: dateStr,
+        isRecurring: false
+      });
+    }
+  });
+  
+  return organized;
+};
+
+// Helper function to get next occurrence of a day
+const getNextDayOccurrence = (dayName) => {
+  const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const today = new Date();
+  const todayDay = today.getDay();
+  const targetDay = days.indexOf(dayName);
+  let daysUntilTarget = targetDay - todayDay;
+  
+  if (daysUntilTarget <= 0) {
+    daysUntilTarget += 7;
+  }
+  
+  const nextDate = new Date(today);
+  nextDate.setDate(today.getDate() + daysUntilTarget);
+  return nextDate;
+};
 
 exports.getChores = async (req, res) => {
   try {
@@ -8,37 +64,35 @@ exports.getChores = async (req, res) => {
     if (!user) {
       return res.status(404).json({ message: 'Avatar not found' });
     }
-    const avatar = user.avatars.id(avatarId);
     
-    // Organize chores by day of the week and specific dates
-    const organizedChores = {
-      Sunday: [], Monday: [], Tuesday: [], Wednesday: [], Thursday: [], Friday: [], Saturday: [], Unscheduled: []
+    const avatar = user.avatars.id(avatarId);
+    if (!avatar) {
+      return res.status(404).json({ message: 'Avatar not found in user document' });
+    }
+
+    // Organize chores by date
+    const choresByDate = organizeChoresByDate(avatar.chores);
+
+    // Get today's stats
+    const today = format(new Date(), 'yyyy-MM-dd');
+    const todayChores = choresByDate[today] || [];
+    const stats = {
+      totalChores: todayChores.length,
+      completedChores: todayChores.filter(chore => chore.completed).length
     };
 
-    avatar.chores.forEach(chore => {
-      if (chore.isRecurring && Array.isArray(chore.days)) {
-        chore.days.forEach(day => {
-          organizedChores[day].push({
-            ...chore.toObject(),
-            recurringDay: day
-          });
-        });
-      } else {
-        let day;
-        if (chore.date && isValid(parseISO(chore.date))) {
-          day = format(parseISO(chore.date), 'EEEE');
-        } else {
-          day = 'Unscheduled';
-        }
-        organizedChores[day].push({
-          ...chore.toObject(),
-          formattedDate: chore.date ? format(parseISO(chore.date), 'MMM d, yyyy') : 'No date'
-        });
-      }
+    console.log('Sending organized chores:', {
+      choresByDate,
+      stats,
+      completedChores: avatar.completedChores || []
     });
 
-    console.log('Organized chores:', organizedChores);
-    res.json({ chores: organizedChores, completedChores: avatar.completedChores || {} });
+    res.json({
+      chores: choresByDate,
+      stats,
+      completedChores: avatar.completedChores || []
+    });
+
   } catch (error) {
     console.error('Error in getChores:', error);
     res.status(500).json({ message: 'Error fetching chores', error: error.message });
@@ -124,23 +178,55 @@ exports.addChore = async (req, res) => {
 exports.toggleChore = async (req, res) => {
   try {
     const { avatarId } = req.params;
-    const { day, chore, completed } = req.body;
+    const { choreId, completed } = req.body;
+
     const user = await User.findOne({ 'avatars._id': avatarId });
     if (!user) {
       return res.status(404).json({ message: 'Avatar not found' });
     }
+
     const avatar = user.avatars.id(avatarId);
-    if (!avatar.completedChores) {
-      avatar.completedChores = {};
+    const chore = avatar.chores.id(choreId);
+
+    if (!chore) {
+      return res.status(404).json({ message: 'Chore not found' });
     }
-    if (!avatar.completedChores[day]) {
-      avatar.completedChores[day] = {};
+
+    // Update completion status
+    chore.completed = completed;
+    chore.lastCompleted = completed ? new Date() : null;
+
+    // Update completedChores array
+    if (completed) {
+      if (!avatar.completedChores) {
+        avatar.completedChores = [];
+      }
+      avatar.completedChores.push({
+        choreId: chore._id,
+        name: chore.name,
+        completedAt: new Date()
+      });
+    } else {
+      // Remove from completedChores if unchecked
+      avatar.completedChores = avatar.completedChores.filter(
+        c => c.choreId.toString() !== choreId
+      );
     }
-    avatar.completedChores[day][chore] = completed;
+
     await user.save();
-    res.status(200).json({ message: 'Chore toggled successfully', completedChores: avatar.completedChores });
+
+    // Return updated chores organized by date
+    const choresByDate = organizeChoresByDate(avatar.chores);
+    
+    res.json({
+      message: 'Chore updated successfully',
+      chores: choresByDate,
+      completedChores: avatar.completedChores
+    });
+
   } catch (error) {
-    res.status(500).json({ message: 'Error toggling chore', error: error.message });
+    console.error('Error in toggleChore:', error);
+    res.status(500).json({ message: 'Error updating chore', error: error.message });
   }
 };
 

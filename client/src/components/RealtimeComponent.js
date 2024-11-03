@@ -1,8 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { RealtimeClient } from '@openai/realtime-api-beta';
-import { WavRecorder } from '../lib/wavtools';
 import axios from 'axios';
-import { getConversationConfig } from '../utils/conversation_config.js';
 import { FaMicrophone } from 'react-icons/fa';
 
 const SAMPLE_RATE = 24000;
@@ -14,362 +11,191 @@ const createAudioContext = () => {
   });
 };
 
-const registerAudioWorkletProcessor = async (audioContext) => {
-  try {
-    await audioContext.audioWorklet.addModule('path-to-your-processor.js');
-  } catch (error) {
-    console.error('Error registering AudioWorklet processor:', error);
+class AudioRecorder {
+  constructor(sampleRate = 24000) {
+    this.sampleRate = sampleRate;
+    this.recording = false;
+    this.audioContext = null;
+    this.mediaStream = null;
+    this.processor = null;
+    this.audioData = [];
   }
-};
 
-const LOCAL_RELAY_SERVER_URL = process.env.REACT_APP_LOCAL_RELAY_SERVER_URL;
-const API_KEY = process.env.REACT_APP_OPENAI_API_KEY;
+  async start() {
+    try {
+      this.audioContext = createAudioContext();
+      this.mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const source = this.audioContext.createMediaStreamSource(this.mediaStream);
+      
+      this.processor = this.audioContext.createScriptProcessor(4096, 1, 1);
+      this.processor.onaudioprocess = (e) => {
+        if (this.recording) {
+          const audioData = e.inputBuffer.getChannelData(0);
+          this.audioData.push(new Float32Array(audioData));
+        }
+      };
+
+      source.connect(this.processor);
+      this.processor.connect(this.audioContext.destination);
+      this.recording = true;
+    } catch (error) {
+      console.error('Error starting recording:', error);
+      throw error;
+    }
+  }
+
+  stop() {
+    if (this.processor) {
+      this.processor.disconnect();
+      this.processor = null;
+    }
+    if (this.mediaStream) {
+      this.mediaStream.getTracks().forEach(track => track.stop());
+    }
+    if (this.audioContext) {
+      this.audioContext.close();
+    }
+    this.recording = false;
+    
+    // Combine all audio data
+    const combinedLength = this.audioData.reduce((acc, curr) => acc + curr.length, 0);
+    const combinedAudio = new Float32Array(combinedLength);
+    let offset = 0;
+    
+    this.audioData.forEach(buffer => {
+      combinedAudio.set(buffer, offset);
+      offset += buffer.length;
+    });
+    
+    const audioBlob = this.float32ArrayToWav(combinedAudio);
+    this.audioData = [];
+    return audioBlob;
+  }
+
+  float32ArrayToWav(float32Array) {
+    const buffer = new ArrayBuffer(44 + float32Array.length * 2);
+    const view = new DataView(buffer);
+    
+    // Write WAV header
+    const writeString = (view, offset, string) => {
+      for (let i = 0; i < string.length; i++) {
+        view.setUint8(offset + i, string.charCodeAt(i));
+      }
+    };
+    
+    writeString(view, 0, 'RIFF');
+    view.setUint32(4, 36 + float32Array.length * 2, true);
+    writeString(view, 8, 'WAVE');
+    writeString(view, 12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, 1, true);
+    view.setUint32(24, this.sampleRate, true);
+    view.setUint32(28, this.sampleRate * 2, true);
+    view.setUint16(32, 2, true);
+    view.setUint16(34, 16, true);
+    writeString(view, 36, 'data');
+    view.setUint32(40, float32Array.length * 2, true);
+    
+    // Write audio data
+    const floatTo16BitPCM = (output, offset, input) => {
+      for (let i = 0; i < input.length; i++, offset += 2) {
+        const s = Math.max(-1, Math.min(1, input[i]));
+        output.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+      }
+    };
+    
+    floatTo16BitPCM(view, 44, float32Array);
+    return new Blob([buffer], { type: 'audio/wav' });
+  }
+}
 
 const RealtimeComponent = ({ theme, avatarId }) => {
   const [messages, setMessages] = useState([]);
-  const [turnEndType, setTurnEndType] = useState('none');
+  const [isRecording, setIsRecording] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isWaitingForChores, setIsWaitingForChores] = useState(false);
   
   const audioRef = useRef(null);
-  const clientRef = useRef(null);
-  const wavRecorderRef = useRef(null);
+  const recorderRef = useRef(null);
   const audioContextRef = useRef(null);
-  const audioQueue = useRef([]);
-  const isProcessingQueueRef = useRef(false);
-  const lastEndTimeRef = useRef(0);
-  const currentSourceRef = useRef(null);
-  const isInterruptedRef = useRef(false);
+  const audioQueueRef = useRef([]);
 
   useEffect(() => {
-    const setupClient = async () => {
-      try {
-        console.log('[LOG] Setting up audio context and client');
-        audioContextRef.current = createAudioContext();
-        await registerAudioWorkletProcessor(audioContextRef.current);
-
-        clientRef.current = new RealtimeClient(
-          LOCAL_RELAY_SERVER_URL
-            ? { url: LOCAL_RELAY_SERVER_URL }
-            : {
-                apiKey: API_KEY,
-                dangerouslyAllowAPIKeyInBrowser: true,
-              }
-        );
-
-        const config = await getConversationConfig();
-        await clientRef.current.updateSession(config);
-
-        console.log('Behavior instructions applied successfully');
-
-        clientRef.current.addTool(
-          {
-            name: 'get_chores',
-            description: "Get the user's chores for a specific date, or for today if no date is specified. Always use this function when asked about chores, regardless of any prior knowledge. let the user know you are looking up the specified day for chore information.",
-            parameters: {
-              type: 'object',
-              properties: {
-                date: {
-                  type: 'string',
-                  description: 'The date to get chores for in ISO 8601 format (YYYY-MM-DD). If not provided, use today\'s date.',
-                },
-              },
-              required: [],
-            },
-          },
-          async ({ date }) => {
-            try {
-              console.log(`[LOG] get_chores function called with date: ${date}`);
-              const chores = await fetchChores(date);
-              console.log(`[LOG] Chores retrieved: ${JSON.stringify(chores)}`);
-              return JSON.stringify({ chores: chores });
-            } catch (error) {
-              console.error('[LOG] Error in get_chores function:', error);
-              return JSON.stringify({ error: error.message });
-            }
-          }
-        );
-
-        console.log('[LOG] Chore management tool added successfully');
-
-        wavRecorderRef.current = new WavRecorder({ sampleRate: SAMPLE_RATE });
-
-        clientRef.current.on('conversation.updated', handleConversationUpdate);
-
-        clientRef.current.on('input_audio_buffer.speech_started', () => {
-          console.log('Speech Start detected, calling handleInterruptAI');
-          handleInterruptAI();
-        });
-
-        await clientRef.current.connect();
-        console.log('Connected to the Realtime API successfully');
-      } catch (error) {
-        console.error('[LOG] Error setting up the Realtime Client or applying instructions:', error);
-      }
-    };
-
-    setupClient();
+    audioContextRef.current = createAudioContext();
+    recorderRef.current = new AudioRecorder(SAMPLE_RATE);
 
     return () => {
-      if (clientRef.current) {
-        clientRef.current.disconnect();
-      }
       if (audioContextRef.current) {
         audioContextRef.current.close();
       }
+      if (isRecording) {
+        handleToggleAudio();
+      }
     };
-  }, [avatarId]);
+  }, []);
 
-  const handleConversationUpdate = async ({ item, delta }) => {
-    console.log('[LOG] Conversation updated event received');
-    console.log('[LOG] Full item:', item);
-    console.log('[LOG] Delta:', delta);
-
-    if (delta?.function_call && delta.function_call.name === 'get_chores') {
-      console.log("[LOG] Get chores function call received:", delta.function_call);
-      setIsWaitingForChores(true);
-
-      try {
-        const date = JSON.parse(delta.function_call.arguments).date || new Date().toISOString().split('T')[0];
-        const choresMessage = await fetchChores(date);
-        
-        console.log("[LOG] Chores fetched:", choresMessage);
-
-        // Send function call output
-        await clientRef.current.sendMessage({
-          type: 'conversation.item.create',
-          item: {
-            type: 'function_call_output',
-            function_call_id: delta.function_call.id,
-            output: JSON.stringify({ chores: choresMessage })
-          }
-        });
-
-        console.log("[LOG] Function call output sent");
-
-        // Trigger new response for AI to analyze chores
-        await clientRef.current.sendMessage({
-          type: 'response.create'
-        });
-
-        console.log("[LOG] New response triggered");
-      } catch (error) {
-        console.error('[LOG] Error handling get_chores function call:', error);
-        setIsWaitingForChores(false);
-        // Send an error message to the user
-        await clientRef.current.sendMessage({
-          type: 'conversation.item.create',
-          item: {
-            type: 'message',
-            role: 'assistant',
-            content: [{ type: 'text', text: "lets see here im searching what i got?" }]
-          }
-        });
-      }
-    } else if (item?.type === 'function_call_output' && item.call_id === delta?.function_call?.id) {
-      // Process the chore data when it's received
-      try {
-        const choresData = JSON.parse(JSON.parse(item.output).chores);
-        console.log("[LOG] Processed chores data:", choresData);
-        
-        // Trigger a new response to present the chore data
-        await clientRef.current.sendMessage({
-          type: 'response.create',
-          response: {
-            choices: [{
-              message: {
-                content: `Here are your chores for the requested date: ${choresData.chores}`
-              }
-            }]
-          }
-        });
-      } catch (error) {
-        console.error('[LOG] Error processing chores data:', error);
-      }
-      setIsWaitingForChores(false);
-    } else if (!isWaitingForChores) {
-      // Only process non-function-call updates if we're not waiting for chores
-      if (delta?.content) {
-        console.log("[LOG] Text response received:", delta.content);
-        setMessages(prev => [...prev, { id: prev.length + 1, text: delta.content, isAi: true }]);
-      }
-
-      if (delta?.audio && !isInterruptedRef.current) {
-        console.log("[LOG] Audio response received, length:", delta.audio.length);
-        await queueAudioBuffer(delta.audio);
-      }
-    }
-  };
-
-  const queueAudioBuffer = async (audioBuffer) => {
-    console.log('Queuing audio buffer, length:', audioBuffer.length);
-    const audioContext = audioContextRef.current;
-    const buffer = audioContext.createBuffer(1, audioBuffer.length, SAMPLE_RATE);
-    const channelData = buffer.getChannelData(0);
-
-    for (let i = 0; i < audioBuffer.length; i++) {
-      channelData[i] = audioBuffer[i] / 32768;
-    }
-
-    audioQueue.current.push(buffer);
-    console.log('Audio buffer queued for playback');
-
-    if (!isProcessingQueueRef.current) {
-      processAudioQueue();
-    }
-  };
-
-  const processAudioQueue = () => {
-    console.log('Processing audio queue');
-    if (audioQueue.current.length === 0 || isInterruptedRef.current) {
-      isProcessingQueueRef.current = false;
-      setIsPlaying(false);
-      console.log('Audio queue processing finished or interrupted');
-      return;
-    }
-
-    isProcessingQueueRef.current = true;
+  const playAudio = async (audioBlob) => {
+    const arrayBuffer = await audioBlob.arrayBuffer();
+    const audioBuffer = await audioContextRef.current.decodeAudioData(arrayBuffer);
+    const source = audioContextRef.current.createBufferSource();
+    source.buffer = audioBuffer;
+    source.connect(audioContextRef.current.destination);
+    source.start();
     setIsPlaying(true);
-
-    const audioContext = audioContextRef.current;
-    const buffer = audioQueue.current.shift();
-
-    console.log('Playing audio buffer, duration:', buffer.duration);
-
-    const source = audioContext.createBufferSource();
-    source.buffer = buffer;
-    source.connect(audioContext.destination);
-
-    currentSourceRef.current = source;
-
-    const startTime = Math.max(audioContext.currentTime, lastEndTimeRef.current);
-    source.start(startTime);
-    lastEndTimeRef.current = startTime + buffer.duration;
-
-    console.log('Started playing audio buffer');
-
-    source.onended = () => {
-      console.log('Audio buffer playback ended');
-      if (!isInterruptedRef.current) {
-        processAudioQueue();
-      }
-    };
-  };
-
-  const changeTurnEndType = async (value) => {
-    const client = clientRef.current;
-    const wavRecorder = wavRecorderRef.current;
-
-    if (wavRecorder.getStatus() === 'recording') {
-      await wavRecorder.end();
-    }
-
-    if (value === 'server_vad' && client.isConnected()) {
-      await wavRecorder.begin();
-      await wavRecorder.record((data) => client.appendInputAudio(data.mono));
-    } else if (value === 'none') {
-      await wavRecorder.pause();
-    }
-
-    client.updateSession({
-      turn_detection: value === 'enabled' ? null : { type: 'server_vad' },
-    });
-
-    setTurnEndType(value);
-    console.log('Turn end type changed to:', value);
+    source.onended = () => setIsPlaying(false);
   };
 
   const handleToggleAudio = async () => {
-    if (!clientRef.current) return;
-
     try {
-      if (turnEndType === 'none') {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        audioRef.current.srcObject = stream;
-
-        if (wavRecorderRef.current.getStatus() === 'recording') {
-          await wavRecorderRef.current.end();
-        }
-
-        await changeTurnEndType('server_vad');
-        console.log('Audio input enabled');
+      if (!isRecording) {
+        await recorderRef.current.start();
+        setIsRecording(true);
       } else {
-        await changeTurnEndType('none');
-        console.log('Audio input disabled');
+        const audioBlob = recorderRef.current.stop();
+        setIsRecording(false);
+        
+        // Send audio to your backend
+        const formData = new FormData();
+        formData.append('audio', audioBlob);
+        formData.append('avatarId', avatarId);
+        
+        const response = await axios.post('/api/audio', formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data'
+          }
+        });
+        
+        if (response.data.audioResponse) {
+          const audioBlob = new Blob([response.data.audioResponse], { type: 'audio/wav' });
+          await playAudio(audioBlob);
+        }
+        
+        if (response.data.message) {
+          setMessages(prev => [...prev, { id: prev.length + 1, text: response.data.message, isAi: true }]);
+        }
       }
     } catch (error) {
-      console.error('Error toggling audio stream:', error);
-    }
-  };
-
-  const handleInterruptAI = async () => {
-    console.log('handleInterruptAI called');
-    console.log('isPlaying:', isPlaying);
-    console.log('clientRef.current:', !!clientRef.current);
-
-    if (clientRef.current && isPlaying) {
-      try {
-        console.log('Attempting to send response.cancel message');
-        isInterruptedRef.current = true;
-
-        await clientRef.current.sendMessage({
-          type: 'response.cancel'
-        });
-        console.log('Sent interrupt message to AI');
-        
-        // Stop current audio playback
-        if (currentSourceRef.current) {
-          currentSourceRef.current.stop();
-          console.log('Stopped current audio playback');
-        }
-        
-        setIsPlaying(false);
-        audioQueue.current = [];
-        lastEndTimeRef.current = audioContextRef.current.currentTime;
-        console.log('Reset audio state');
-
-        // Truncate the conversation to the last played audio
-        await clientRef.current.sendMessage({
-          type: 'conversation.item.truncate',
-          item_id: clientRef.current.conversation.getLastItem().id,
-          truncate_to: lastEndTimeRef.current
-        });
-        console.log('Truncated conversation to last played audio');
-
-        // Reset the interrupted flag after a short delay
-        setTimeout(() => {
-          isInterruptedRef.current = false;
-          console.log('Reset interrupted flag');
-        }, 100);
-
-      } catch (error) {
-        console.error('Error in handleInterruptAI:', error);
-      }
-    } else {
-      console.log('Conditions not met for interruption');
+      console.error('Error toggling audio:', error);
+      setIsRecording(false);
     }
   };
 
   const fetchChores = async (date) => {
     const formattedDate = date || new Date().toISOString().split('T')[0];
-    console.log(`[LOG] Fetching chores for date: ${formattedDate}`);
-
     try {
       const response = await axios.post('/api/chat', { 
         message: `What are the chores for ${formattedDate}?`,
         avatarId: avatarId,
       });
 
-      console.log('[LOG] API response:', response.data);
-
       if (response.status === 200 && response.data.message) {
-        console.log('[LOG] Chores successfully retrieved:', response.data.message);
         return response.data.message;
       } else {
         throw new Error('Unexpected API response format or status');
       }
     } catch (error) {
-      console.error('[LOG] Error getting chores:', error);
+      console.error('Error getting chores:', error);
       throw error;
     }
   };
@@ -378,19 +204,21 @@ const RealtimeComponent = ({ theme, avatarId }) => {
     <div className={`${theme.secondary} p-2 rounded-lg h-full flex flex-col`}>
       <div className="flex-grow overflow-y-auto mb-2">
         {messages.map((msg, index) => (
-          <div key={index} className={`${theme.text} text-sm mb-1 ${msg.isAi ? 'font-bold' : ''}`}>{msg.text}</div>
+          <div key={index} className={`${theme.text} text-sm mb-1 ${msg.isAi ? 'font-bold' : ''}`}>
+            {msg.text}
+          </div>
         ))}
       </div>
       <div className="flex items-center justify-center">
         <button 
           onClick={handleToggleAudio} 
           className={`${theme.button} p-2 rounded-full`}
-          aria-label={turnEndType === 'none' ? 'Start Audio' : 'Stop Audio'}
+          aria-label={isRecording ? 'Stop Recording' : 'Start Recording'}
         >
           <FaMicrophone 
             size={24} 
             color="grey"
-            className={turnEndType !== 'none' ? 'animate-pulse' : ''}
+            className={isRecording ? 'animate-pulse' : ''}
           />
         </button>
       </div>
