@@ -35,6 +35,11 @@ app.use(cors());
 app.use(express.json());
 app.use(morgan('dev'));
 
+// Add static file serving for production
+if (process.env.NODE_ENV === 'production') {
+  app.use(express.static(path.join(__dirname, '../client/build')));
+}
+
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/family', familyRoutes);
@@ -55,6 +60,13 @@ app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} - ${req.method} ${req.path} - IP: ${req.ip}`);
   next();
 });
+
+// Serve React app for any unmatched routes in production
+if (process.env.NODE_ENV === 'production') {
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, '../client/build/index.html'));
+  });
+}
 
 // MongoDB connection
 const MONGODB_URI = process.env.MONGODB_URI;
