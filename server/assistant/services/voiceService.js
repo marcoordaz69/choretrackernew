@@ -264,10 +264,14 @@ Be helpful, supportive, and genuinely engaged in the conversation.`;
 
   /**
    * Get function tools for voice calls
+   * Converts Chat Completions format to Realtime API format
    */
   getVoiceTools() {
     const aiService = require('./aiService');
-    return aiService.getFunctionTools();
+    const chatTools = aiService.getFunctionTools();
+
+    // Realtime API expects just the function definitions, not wrapped in {type: 'function', function: {...}}
+    return chatTools.map(tool => tool.function);
   }
 
   /**
