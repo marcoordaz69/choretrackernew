@@ -11,9 +11,18 @@ const Interaction = require('../models/Interaction');
  */
 router.post('/sms/incoming', async (req, res) => {
   try {
+    // Log full request body for debugging
+    console.log('Full webhook body:', JSON.stringify(req.body, null, 2));
+
     const { From, Body, MessageSid } = req.body;
 
     console.log(`Incoming SMS from ${From}: ${Body}`);
+
+    // Validate required fields
+    if (!From || !Body) {
+      console.error('Missing From or Body in webhook:', { From, Body });
+      return res.status(400).send('Missing required fields');
+    }
 
     // Find or create user
     let user = await User.findByPhone(From);
@@ -170,7 +179,7 @@ router.post('/voice/status', (req, res) => {
 async function handleOnboarding(user, message) {
   // Track onboarding progress in ai_context
   const onboardingState = user.ai_context?.onboarding || { step: 'name' };
-  const userMessage = message.trim();
+  const userMessage = (message || '').trim();
 
   let response = '';
   let nextStep = null;
