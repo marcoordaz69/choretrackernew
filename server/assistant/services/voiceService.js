@@ -55,7 +55,6 @@ class VoiceService {
         openAIWs.send(JSON.stringify({
           type: 'session.update',
           session: {
-            type: 'realtime',
             model: 'gpt-realtime-2025-08-28',
             instructions: this.getVoiceInstructions(user),
             audio: {
