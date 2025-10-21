@@ -222,13 +222,18 @@ setInterval(() => {
 // Vonage webhook routes
 app.all('/vonage/voice/answer', (req, res) => {
   console.log('Received voice answer webhook:', req.method, req.query);
+  // Use RAILWAY_PUBLIC_DOMAIN or NGROK_URL for backward compatibility
+  const baseUrl = process.env.RAILWAY_PUBLIC_DOMAIN || process.env.NGROK_URL || req.get('host');
+  const websocketUrl = `wss://${baseUrl}/ws`;
+  console.log('WebSocket URL for Vonage:', websocketUrl);
+
   res.json([
     {
       action: 'connect',
       endpoint: [
         {
           type: 'websocket',
-          uri: `wss://${process.env.NGROK_URL}/ws`,
+          uri: websocketUrl,
           'content-type': 'audio/l16;rate=16000',
           headers: {},
           direction: "both"
