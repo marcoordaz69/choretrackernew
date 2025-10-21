@@ -16,7 +16,7 @@ router.post('/sms/incoming', async (req, res) => {
     console.log(`Incoming SMS from ${From}: ${Body}`);
 
     // Find or create user
-    let user = await User.findOne({ phone: From });
+    let user = await User.findByPhone(From);
 
     if (!user) {
       // New user - start onboarding
@@ -153,23 +153,197 @@ router.post('/voice/status', (req, res) => {
 });
 
 /**
- * Handle onboarding flow
+ * Handle onboarding flow - Multi-step SMS-based setup
  */
 async function handleOnboarding(user, message) {
-  const step = user.onboarded ? 'complete' : 'name';
+  // Track onboarding progress in ai_context
+  const onboardingState = user.ai_context?.onboarding || { step: 'name' };
+  const userMessage = message.trim();
 
-  switch (step) {
+  let response = '';
+  let nextStep = null;
+
+  switch (onboardingState.step) {
     case 'name':
-      // User provided their name
-      user.name = message.trim();
-      user.onboarded = true;
-      await user.save();
-
-      const onboardingComplete = `Great to meet you, ${user.name}! 🎉\n\nHere's what I can do:\n• Track habits & goals\n• Manage tasks\n• Daily check-ins\n• Smart reminders\n• Voice journaling\n\nTry saying:\n"Remind me to call mom"\n"I exercised for 30 mins"\n"Goal: read 12 books this year"\n\nReady to get started?`;
-
-      await twilioService.sendSMS(user.phone, onboardingComplete);
+      // Step 1: Get user's name
+      user.name = userMessage;
+      nextStep = 'timezone';
+      response = `Nice to meet you, ${user.name}! 😊\n\nWhat timezone are you in?\n\nExamples:\n• Eastern (ET)\n• Pacific (PT)\n• Central (CT)\n• Mountain (MT)\n\nOr reply "skip" to use Eastern Time.`;
       break;
+
+    case 'timezone':
+      // Step 2: Get timezone
+      const timezoneMap = {
+        'et': 'America/New_York',
+        'eastern': 'America/New_York',
+        'pt': 'America/Los_Angeles',
+        'pacific': 'America/Los_Angeles',
+        'ct': 'America/Chicago',
+        'central': 'America/Chicago',
+        'mt': 'America/Denver',
+        'mountain': 'America/Denver',
+        'skip': 'America/New_York'
+      };
+
+      const tz = timezoneMap[userMessage.toLowerCase()] || 'America/New_York';
+      user.timezone = tz;
+      nextStep = 'morning_time';
+      response = `Got it! Set to ${tz.split('/')[1].replace('_', ' ')}.\n\nWhat time should I send your morning check-in?\n\n(e.g., "7:00", "8:30", "skip" for 7am)`;
+      break;
+
+    case 'morning_time':
+      // Step 3: Morning check-in time
+      const morningTime = parseMilitaryTime(userMessage) || '07:00';
+      user.preferences = user.preferences || {};
+      user.preferences.morningCheckInTime = morningTime;
+      nextStep = 'evening_time';
+      response = `Morning check-in set for ${formatTime(morningTime)}! ☀️\n\nWhat about your evening reflection?\n\n(e.g., "9:00", "21:30", "skip" for 9pm)`;
+      break;
+
+    case 'evening_time':
+      // Step 4: Evening check-in time
+      const eveningTime = parseMilitaryTime(userMessage) || '21:00';
+      user.preferences.eveningCheckInTime = eveningTime;
+      nextStep = 'nudge_frequency';
+      response = `Evening reflection set for ${formatTime(eveningTime)}! 🌙\n\nHow often should I nudge you with reminders?\n\n1️⃣ High - Stay on top of everything\n2️⃣ Moderate - Balanced (recommended)\n3️⃣ Low - Minimal interruptions\n4️⃣ Off - Only when you ask\n\nReply with a number (1-4):`;
+      break;
+
+    case 'nudge_frequency':
+      // Step 5: Nudge frequency
+      const nudgeMap = {
+        '1': 'high',
+        'high': 'high',
+        '2': 'moderate',
+        'moderate': 'moderate',
+        '3': 'low',
+        'low': 'low',
+        '4': 'off',
+        'off': 'off'
+      };
+
+      const frequency = nudgeMap[userMessage.toLowerCase()] || 'moderate';
+      user.preferences.nudgeFrequency = frequency;
+      nextStep = 'quiet_hours';
+      response = `Nudge frequency: ${frequency}! 👍\n\nWhen should I be quiet? (No messages during these hours)\n\nExamples:\n• "10pm to 7am"\n• "22:00 to 07:00"\n• "skip" (default: 10pm-7am)`;
+      break;
+
+    case 'quiet_hours':
+      // Step 6: Quiet hours
+      const quietHours = parseQuietHours(userMessage);
+      user.preferences.quietHours = quietHours;
+      nextStep = 'complete';
+
+      // Mark onboarding as complete
+      user.onboarded = true;
+      user.ai_context = {
+        ...user.ai_context,
+        onboarding: { step: 'complete', completedAt: new Date() }
+      };
+
+      response = `Perfect! Your profile is all set up! 🎉\n\n📋 Your Settings:\n` +
+        `• Morning check-in: ${formatTime(user.preferences.morningCheckInTime)}\n` +
+        `• Evening reflection: ${formatTime(user.preferences.eveningCheckInTime)}\n` +
+        `• Nudge frequency: ${user.preferences.nudgeFrequency}\n` +
+        `• Quiet hours: ${formatTime(quietHours.start)} - ${formatTime(quietHours.end)}\n\n` +
+        `🚀 What I can help with:\n` +
+        `• Track habits & goals\n` +
+        `• Manage tasks & reminders\n` +
+        `• Daily check-ins & reflections\n` +
+        `• Smart nudges & accountability\n\n` +
+        `Try saying:\n` +
+        `"Remind me to call mom tomorrow at 3pm"\n` +
+        `"I exercised for 30 mins"\n` +
+        `"Goal: read 12 books this year"\n\n` +
+        `Ready to get started? 💪`;
+      break;
+
+    default:
+      response = 'Something went wrong. Let\'s start over. What\'s your name?';
+      nextStep = 'name';
   }
+
+  // Update user with new onboarding state
+  if (nextStep) {
+    user.ai_context = {
+      ...user.ai_context,
+      onboarding: { step: nextStep }
+    };
+  }
+
+  await user.save();
+  await twilioService.sendSMS(user.phone, response);
+
+  // Log interaction
+  await Interaction.create({
+    userId: user.id,
+    type: 'sms_inbound',
+    direction: 'inbound',
+    content: { userMessage: message },
+    metadata: { onboardingStep: onboardingState.step }
+  });
+
+  await Interaction.create({
+    userId: user.id,
+    type: 'sms_outbound',
+    direction: 'outbound',
+    content: { assistantResponse: response },
+    metadata: { onboardingStep: nextStep }
+  });
+}
+
+/**
+ * Helper: Parse time input to 24-hour format
+ */
+function parseMilitaryTime(input) {
+  if (!input || input.toLowerCase() === 'skip') return null;
+
+  input = input.toLowerCase().trim();
+
+  // Handle formats like "7:00", "8:30", "7", "9pm", "7:30am"
+  const timeRegex = /(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i;
+  const match = input.match(timeRegex);
+
+  if (!match) return null;
+
+  let hours = parseInt(match[1]);
+  const minutes = match[2] ? parseInt(match[2]) : 0;
+  const meridiem = match[3]?.toLowerCase();
+
+  // Convert to 24-hour format
+  if (meridiem === 'pm' && hours < 12) hours += 12;
+  if (meridiem === 'am' && hours === 12) hours = 0;
+
+  return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+}
+
+/**
+ * Helper: Parse quiet hours input
+ */
+function parseQuietHours(input) {
+  if (!input || input.toLowerCase() === 'skip') {
+    return { start: '22:00', end: '07:00' };
+  }
+
+  // Try to parse "10pm to 7am" or "22:00 to 07:00"
+  const parts = input.split(/to|-/);
+
+  if (parts.length === 2) {
+    const start = parseMilitaryTime(parts[0].trim()) || '22:00';
+    const end = parseMilitaryTime(parts[1].trim()) || '07:00';
+    return { start, end };
+  }
+
+  return { start: '22:00', end: '07:00' };
+}
+
+/**
+ * Helper: Format military time to 12-hour
+ */
+function formatTime(militaryTime) {
+  const [hours, minutes] = militaryTime.split(':').map(Number);
+  const meridiem = hours >= 12 ? 'PM' : 'AM';
+  const displayHours = hours % 12 || 12;
+  return `${displayHours}:${minutes.toString().padStart(2, '0')} ${meridiem}`;
 }
 
 module.exports = router;
