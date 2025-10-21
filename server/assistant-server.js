@@ -57,7 +57,8 @@ initializeAssistant(app);
 const server = http.createServer(app);
 
 // Start server
-const PORT = process.env.ASSISTANT_PORT || 5001;
+// Railway provides PORT env var, fallback to ASSISTANT_PORT for local dev
+const PORT = process.env.PORT || process.env.ASSISTANT_PORT || 5001;
 server.listen(PORT, () => {
   console.log('');
   console.log('═══════════════════════════════════════════════════════');
