@@ -42,7 +42,10 @@ class VoiceService {
         streamSid: null,
         transcript: '',
         startTime: Date.now(),
-        lastAssistantItem: null
+        lastAssistantItem: null,
+        latestMediaTimestamp: 0,
+        responseStartTimestampTwilio: null,
+        markQueue: []
       };
 
       this.activeSessions.set(callSid, session);
@@ -145,16 +148,29 @@ class VoiceService {
     switch (event.event) {
       case 'start':
         session.streamSid = event.start.streamSid;
+        session.latestMediaTimestamp = 0;
+        session.responseStartTimestampTwilio = null;
+        session.lastAssistantItem = null;
         console.log('Media stream started:', session.streamSid);
         break;
 
       case 'media':
+        // Track timestamp from incoming audio
+        session.latestMediaTimestamp = parseInt(event.media.timestamp);
+
         // Forward audio to OpenAI
         if (session.openAIWs.readyState === WebSocket.OPEN) {
           session.openAIWs.send(JSON.stringify({
             type: 'input_audio_buffer.append',
             audio: event.media.payload
           }));
+        }
+        break;
+
+      case 'mark':
+        // Remove mark from queue when Twilio confirms playback
+        if (session.markQueue.length > 0) {
+          session.markQueue.shift();
         }
         break;
 
@@ -187,11 +203,14 @@ class VoiceService {
       case 'response.output_audio.delta':
         // Stream audio back to Twilio (GA format)
         if (session.twilioWs.readyState === WebSocket.OPEN && event.delta) {
-          // Track the assistant item for interruption handling
+          // Track start timestamp for new responses
           if (event.item_id && event.item_id !== session.lastAssistantItem) {
+            session.responseStartTimestampTwilio = session.latestMediaTimestamp;
             session.lastAssistantItem = event.item_id;
+            console.log(`New response started at timestamp: ${session.responseStartTimestampTwilio}ms`);
           }
 
+          // Send audio to Twilio
           session.twilioWs.send(JSON.stringify({
             event: 'media',
             streamSid: session.streamSid,
@@ -199,22 +218,37 @@ class VoiceService {
               payload: event.delta
             }
           }));
+
+          // Send mark to track playback
+          if (session.streamSid) {
+            session.twilioWs.send(JSON.stringify({
+              event: 'mark',
+              streamSid: session.streamSid,
+              mark: { name: 'responsePart' }
+            }));
+            session.markQueue.push('responsePart');
+          }
         }
         break;
 
       case 'input_audio_buffer.speech_started':
         // Handle interruption when user starts speaking
         console.log('Speech started detected - handling interruption');
-        if (session.lastAssistantItem) {
-          console.log('Interrupting response with id:', session.lastAssistantItem);
 
-          // Send truncate event to OpenAI
-          session.openAIWs.send(JSON.stringify({
-            type: 'conversation.item.truncate',
-            item_id: session.lastAssistantItem,
-            content_index: 0,
-            audio_end_ms: 0
-          }));
+        // Only interrupt if audio has actually started playing
+        if (session.markQueue.length > 0 && session.responseStartTimestampTwilio !== null) {
+          const elapsedTime = session.latestMediaTimestamp - session.responseStartTimestampTwilio;
+          console.log(`Interrupting response at ${elapsedTime}ms`);
+
+          if (session.lastAssistantItem) {
+            // Send truncate event to OpenAI with proper timing
+            session.openAIWs.send(JSON.stringify({
+              type: 'conversation.item.truncate',
+              item_id: session.lastAssistantItem,
+              content_index: 0,
+              audio_end_ms: elapsedTime
+            }));
+          }
 
           // Clear Twilio's audio buffer
           if (session.twilioWs.readyState === WebSocket.OPEN && session.streamSid) {
@@ -225,7 +259,9 @@ class VoiceService {
           }
 
           // Reset tracking
+          session.markQueue = [];
           session.lastAssistantItem = null;
+          session.responseStartTimestampTwilio = null;
         }
         break;
 
