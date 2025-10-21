@@ -28,7 +28,20 @@ router.post('/sms/incoming', async (req, res) => {
 
       const welcomeMessage = `Hey there! I'm your personal life assistant. I'm here to help you optimize your daily routine, track habits, achieve goals, and generally make life easier.\n\nWhat should I call you?`;
 
-      await twilioService.sendSMS(From, welcomeMessage);
+      const smsResult = await twilioService.sendSMS(From, welcomeMessage);
+
+      // Check delivery status after a brief delay
+      setTimeout(async () => {
+        try {
+          const status = await twilioService.getMessageStatus(smsResult.sid);
+          console.log(`Welcome message ${smsResult.sid} status:`, status);
+          if (status.errorCode) {
+            console.error(`⚠️  WELCOME SMS DELIVERY FAILED - Error ${status.errorCode}: ${status.errorMessage}`);
+          }
+        } catch (err) {
+          console.error('Error checking welcome message status:', err);
+        }
+      }, 2000);
 
       await Interaction.create({
         userId: user.id,
@@ -270,7 +283,20 @@ async function handleOnboarding(user, message) {
   }
 
   await user.save();
-  await twilioService.sendSMS(user.phone, response);
+  const smsResult = await twilioService.sendSMS(user.phone, response);
+
+  // Check delivery status after a brief delay
+  setTimeout(async () => {
+    try {
+      const status = await twilioService.getMessageStatus(smsResult.sid);
+      console.log(`Message ${smsResult.sid} status:`, status);
+      if (status.errorCode) {
+        console.error(`⚠️  SMS DELIVERY FAILED - Error ${status.errorCode}: ${status.errorMessage}`);
+      }
+    } catch (err) {
+      console.error('Error checking message status:', err);
+    }
+  }, 2000);
 
   // Log interaction
   await Interaction.create({
