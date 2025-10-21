@@ -13,9 +13,9 @@
 require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
 const express = require('express');
 const cors = require('cors');
-const mongoose = require('mongoose');
 const morgan = require('morgan');
 const http = require('http');
+const { testConnection } = require('./assistant/config/supabase');
 
 // Initialize Express
 const app = express();
@@ -35,20 +35,17 @@ app.get('/health', (req, res) => {
   });
 });
 
-// MongoDB connection
-const MONGODB_URI = process.env.MONGODB_URI;
-if (!MONGODB_URI) {
-  console.error('MONGODB_URI is not defined in environment variables');
-  process.exit(1);
-}
-
-console.log('Connecting to MongoDB...');
-mongoose.connect(MONGODB_URI)
-  .then(() => {
-    console.log('✓ Connected to MongoDB successfully');
+// Supabase PostgreSQL connection
+console.log('Testing Supabase connection...');
+testConnection()
+  .then((success) => {
+    if (!success) {
+      console.error('Failed to connect to Supabase. Check your credentials.');
+      process.exit(1);
+    }
   })
   .catch(err => {
-    console.error('✗ MongoDB connection error:', err);
+    console.error('✗ Supabase connection error:', err);
     process.exit(1);
   });
 
@@ -92,10 +89,8 @@ process.on('SIGTERM', () => {
   shutdownAssistant();
   server.close(() => {
     console.log('Server closed');
-    mongoose.connection.close(false, () => {
-      console.log('MongoDB connection closed');
-      process.exit(0);
-    });
+    console.log('Supabase connection closed');
+    process.exit(0);
   });
 });
 
@@ -104,10 +99,8 @@ process.on('SIGINT', () => {
   shutdownAssistant();
   server.close(() => {
     console.log('Server closed');
-    mongoose.connection.close(false, () => {
-      console.log('MongoDB connection closed');
-      process.exit(0);
-    });
+    console.log('Supabase connection closed');
+    process.exit(0);
   });
 });
 
