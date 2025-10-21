@@ -49,12 +49,12 @@ testConnection()
     process.exit(1);
   });
 
-// Initialize Personal Assistant
-const { initializeAssistant, shutdownAssistant } = require('./assistant');
-initializeAssistant(app);
-
-// Create HTTP server
+// Create HTTP server first (needed for WebSocket)
 const server = http.createServer(app);
+
+// Initialize Personal Assistant with WebSocket support
+const { initializeAssistant, shutdownAssistant } = require('./assistant');
+initializeAssistant(app, server);
 
 // Start server
 // Railway provides PORT env var, fallback to ASSISTANT_PORT for local dev

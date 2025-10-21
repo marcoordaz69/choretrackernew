@@ -7,12 +7,13 @@ const scheduler = require('./services/scheduler');
 /**
  * Initialize the Personal Assistant module
  * @param {express.Application} app - Express app instance
+ * @param {http.Server} server - HTTP server instance (optional, for WebSocket)
  */
-function initializeAssistant(app) {
+function initializeAssistant(app, server) {
   console.log('Initializing Personal Assistant...');
 
-  // Enable WebSocket support
-  const wsInstance = expressWs(app);
+  // Enable WebSocket support with HTTP server
+  const wsInstance = server ? expressWs(app, server) : expressWs(app);
 
   // Mount routes
   app.use('/assistant/webhooks', webhookRoutes);

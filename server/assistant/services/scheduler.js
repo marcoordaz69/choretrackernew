@@ -69,11 +69,11 @@ class Scheduler {
       console.log(`Processing morning check-ins for ${users.length} users at ${currentTime}`);
 
       for (const user of users) {
-        // Skip if in quiet hours
-        if (user.isInQuietHours()) {
-          console.log(`User ${user.phone} is in quiet hours, skipping`);
-          continue;
-        }
+        // Quiet hours disabled
+        // if (user.isInQuietHours()) {
+        //   console.log(`User ${user.phone} is in quiet hours, skipping`);
+        //   continue;
+        // }
 
         // Generate and send morning briefing
         const briefing = await aiService.generateMorningBriefing(user.id);
@@ -104,7 +104,8 @@ class Scheduler {
       console.log(`Processing evening check-ins for ${users.length} users at ${currentTime}`);
 
       for (const user of users) {
-        if (user.isInQuietHours()) continue;
+        // Quiet hours disabled
+        // if (user.isInQuietHours()) continue;
 
         const reflection = await aiService.generateEveningReflection(user.id);
         await twilioService.sendSMS(user.phone, reflection);
@@ -131,7 +132,8 @@ class Scheduler {
       console.log(`Checking proactive nudges for ${users.length} users`);
 
       for (const user of users) {
-        if (user.isInQuietHours()) continue;
+        // Quiet hours disabled
+        // if (user.isInQuietHours()) continue;
 
         // Check for various nudge conditions
         await this.checkHabitReminders(user);

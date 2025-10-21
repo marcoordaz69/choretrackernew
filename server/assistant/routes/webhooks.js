@@ -41,12 +41,11 @@ router.post('/sms/incoming', async (req, res) => {
       return res.status(200).send('OK');
     }
 
-    // Check if user is in quiet hours
-    if (user.isInQuietHours()) {
-      console.log(`User ${user.phone} is in quiet hours, deferring response`);
-      // Could store message and respond later
-      return res.status(200).send('OK');
-    }
+    // Quiet hours disabled for now
+    // if (user.isInQuietHours()) {
+    //   console.log(`User ${user.phone} is in quiet hours, deferring response`);
+    //   return res.status(200).send('OK');
+    // }
 
     // Handle onboarding flow
     if (!user.onboarded) {
