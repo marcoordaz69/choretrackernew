@@ -45,7 +45,8 @@ class VoiceService {
         lastAssistantItem: null,
         latestMediaTimestamp: 0,
         responseStartTimestampTwilio: null,
-        markQueue: []
+        markQueue: [],
+        mediaPacketCount: 0
       };
 
       this.activeSessions.set(callSid, session);
@@ -158,12 +159,23 @@ class VoiceService {
         // Track timestamp from incoming audio
         session.latestMediaTimestamp = parseInt(event.media.timestamp);
 
+        // Log first few media packets for debugging
+        if (!session.mediaPacketCount) {
+          session.mediaPacketCount = 0;
+        }
+        session.mediaPacketCount++;
+        if (session.mediaPacketCount <= 5) {
+          console.log(`Received media packet ${session.mediaPacketCount}, timestamp: ${session.latestMediaTimestamp}`);
+        }
+
         // Forward audio to OpenAI
         if (session.openAIWs.readyState === WebSocket.OPEN) {
           session.openAIWs.send(JSON.stringify({
             type: 'input_audio_buffer.append',
             audio: event.media.payload
           }));
+        } else {
+          console.error('OpenAI WebSocket not open, state:', session.openAIWs.readyState);
         }
         break;
 
@@ -184,6 +196,19 @@ class VoiceService {
    * Handle events from OpenAI Realtime API
    */
   async handleOpenAIEvent(event, session) {
+    // Log all events for debugging
+    const logEventTypes = [
+      'error', 'response.content.done', 'rate_limits.updated',
+      'response.done', 'input_audio_buffer.committed',
+      'input_audio_buffer.speech_stopped', 'input_audio_buffer.speech_started',
+      'session.created', 'session.updated', 'response.created',
+      'conversation.item.created', 'conversation.item.input_audio_transcription.completed'
+    ];
+
+    if (logEventTypes.includes(event.type)) {
+      console.log('OpenAI event:', event.type, JSON.stringify(event).substring(0, 200));
+    }
+
     switch (event.type) {
       case 'session.created':
         console.log('Session created:', event.session.id);
