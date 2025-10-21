@@ -1,0 +1,289 @@
+const WebSocket = require('ws');
+const User = require('../models/User');
+const Interaction = require('../models/Interaction');
+
+class VoiceService {
+  constructor() {
+    this.activeSessions = new Map();
+    console.log('Voice Service initialized');
+  }
+
+  /**
+   * Handle WebSocket connection for voice call
+   * Connects Twilio Media Stream <-> OpenAI Realtime API
+   */
+  async handleVoiceStream(ws, userId, callSid) {
+    try {
+      const user = await User.findById(userId);
+      if (!user) {
+        console.error('User not found for voice stream');
+        ws.close();
+        return;
+      }
+
+      console.log(`Voice stream started for ${user.name} (${callSid})`);
+
+      // Create OpenAI Realtime API WebSocket connection
+      const openAIWs = new WebSocket(
+        'wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-10-01',
+        {
+          headers: {
+            'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+            'OpenAI-Beta': 'realtime=v1'
+          }
+        }
+      );
+
+      // Store session
+      const session = {
+        twilioWs: ws,
+        openAIWs,
+        userId,
+        callSid,
+        streamSid: null,
+        transcript: '',
+        startTime: Date.now()
+      };
+
+      this.activeSessions.set(callSid, session);
+
+      // OpenAI WebSocket event handlers
+      openAIWs.on('open', () => {
+        console.log('OpenAI Realtime API connected');
+
+        // Send session configuration
+        openAIWs.send(JSON.stringify({
+          type: 'session.update',
+          session: {
+            modalities: ['text', 'audio'],
+            instructions: this.getVoiceInstructions(user),
+            voice: 'alloy',
+            input_audio_format: 'g711_ulaw',
+            output_audio_format: 'g711_ulaw',
+            input_audio_transcription: {
+              model: 'whisper-1'
+            },
+            turn_detection: {
+              type: 'server_vad',
+              threshold: 0.5,
+              prefix_padding_ms: 300,
+              silence_duration_ms: 500
+            },
+            tools: this.getVoiceTools(),
+            tool_choice: 'auto',
+            temperature: 0.7
+          }
+        }));
+      });
+
+      openAIWs.on('message', async (data) => {
+        try {
+          const event = JSON.parse(data.toString());
+          await this.handleOpenAIEvent(event, session);
+        } catch (error) {
+          console.error('Error handling OpenAI message:', error);
+        }
+      });
+
+      openAIWs.on('error', (error) => {
+        console.error('OpenAI WebSocket error:', error);
+      });
+
+      openAIWs.on('close', () => {
+        console.log('OpenAI WebSocket closed');
+      });
+
+      // Twilio WebSocket event handlers
+      ws.on('message', (message) => {
+        try {
+          const msg = JSON.parse(message.toString());
+          this.handleTwilioEvent(msg, session);
+        } catch (error) {
+          console.error('Error handling Twilio message:', error);
+        }
+      });
+
+      ws.on('close', async () => {
+        console.log('Twilio stream closed');
+        openAIWs.close();
+
+        // Save interaction
+        const duration = Math.floor((Date.now() - session.startTime) / 1000);
+        await Interaction.create({
+          userId,
+          type: 'voice_inbound',
+          direction: 'inbound',
+          content: {
+            transcript: session.transcript
+          },
+          metadata: {
+            duration,
+            twilioSid: callSid
+          }
+        });
+
+        this.activeSessions.delete(callSid);
+      });
+
+      ws.on('error', (error) => {
+        console.error('Twilio WebSocket error:', error);
+      });
+
+    } catch (error) {
+      console.error('Error handling voice stream:', error);
+      ws.close();
+    }
+  }
+
+  /**
+   * Handle events from Twilio Media Stream
+   */
+  handleTwilioEvent(event, session) {
+    switch (event.event) {
+      case 'start':
+        session.streamSid = event.start.streamSid;
+        console.log('Media stream started:', session.streamSid);
+        break;
+
+      case 'media':
+        // Forward audio to OpenAI
+        if (session.openAIWs.readyState === WebSocket.OPEN) {
+          session.openAIWs.send(JSON.stringify({
+            type: 'input_audio_buffer.append',
+            audio: event.media.payload
+          }));
+        }
+        break;
+
+      case 'stop':
+        console.log('Media stream stopped');
+        break;
+    }
+  }
+
+  /**
+   * Handle events from OpenAI Realtime API
+   */
+  async handleOpenAIEvent(event, session) {
+    switch (event.type) {
+      case 'session.created':
+        console.log('Session created:', event.session.id);
+        break;
+
+      case 'session.updated':
+        console.log('Session updated');
+        break;
+
+      case 'conversation.item.input_audio_transcription.completed':
+        // User's speech transcribed
+        const userTranscript = event.transcript;
+        console.log('User said:', userTranscript);
+        session.transcript += `User: ${userTranscript}\n`;
+        break;
+
+      case 'response.audio.delta':
+        // Stream audio back to Twilio
+        if (session.twilioWs.readyState === WebSocket.OPEN && event.delta) {
+          session.twilioWs.send(JSON.stringify({
+            event: 'media',
+            streamSid: session.streamSid,
+            media: {
+              payload: event.delta
+            }
+          }));
+        }
+        break;
+
+      case 'response.audio_transcript.delta':
+        // AI's speech transcribed (partial)
+        break;
+
+      case 'response.audio_transcript.done':
+        // AI's complete response
+        const aiTranscript = event.transcript;
+        console.log('AI said:', aiTranscript);
+        session.transcript += `Assistant: ${aiTranscript}\n`;
+        break;
+
+      case 'response.function_call_arguments.done':
+        // Function call completed
+        const functionName = event.name;
+        const args = JSON.parse(event.arguments);
+        console.log('Function call:', functionName, args);
+
+        // Execute function
+        const aiService = require('./aiService');
+        const result = await aiService.executeFunctionCall(session.userId, functionName, args);
+
+        // Send result back to OpenAI
+        session.openAIWs.send(JSON.stringify({
+          type: 'conversation.item.create',
+          item: {
+            type: 'function_call_output',
+            call_id: event.call_id,
+            output: JSON.stringify(result)
+          }
+        }));
+        break;
+
+      case 'error':
+        console.error('OpenAI error:', event.error);
+        break;
+    }
+  }
+
+  /**
+   * Get voice-specific instructions for OpenAI
+   */
+  getVoiceInstructions(user) {
+    return `You are ${user.name}'s personal life assistant speaking on a phone call.
+
+Guidelines:
+1. Be conversational and natural - you're talking, not texting
+2. Keep responses concise but warm
+3. Use natural speech patterns (um, well, etc. sparingly)
+4. Listen actively and ask follow-up questions
+5. Help ${user.name} reflect, plan, and track their life
+
+Core capabilities:
+- Help create and manage tasks
+- Track habits and celebrate streaks
+- Set and monitor goals
+- Daily reflections and check-ins
+- Provide accountability and support
+
+User context:
+- Name: ${user.name}
+- Timezone: ${user.timezone}
+- Personality preference: ${user.aiContext.personality}
+
+Current time: ${new Date().toLocaleString('en-US', { timeZone: user.timezone })}
+
+Be helpful, supportive, and genuinely engaged in the conversation.`;
+  }
+
+  /**
+   * Get function tools for voice calls
+   */
+  getVoiceTools() {
+    const aiService = require('./aiService');
+    return aiService.getFunctionTools();
+  }
+
+  /**
+   * Initiate outbound call for reflection
+   */
+  async initiateReflectionCall(userId) {
+    const twilioService = require('./twilioService');
+    const user = await User.findById(userId);
+
+    if (!user) throw new Error('User not found');
+
+    const webhookUrl = `https://${process.env.DOMAIN}/assistant/voice/outbound-reflection?userId=${userId}`;
+
+    await twilioService.makeCall(user.phone, webhookUrl);
+    console.log(`Initiated reflection call to ${user.name}`);
+  }
+}
+
+module.exports = new VoiceService();
