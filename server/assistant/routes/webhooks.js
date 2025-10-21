@@ -5,23 +5,61 @@ const aiService = require('../services/aiService');
 const User = require('../models/User');
 const Interaction = require('../models/Interaction');
 
+// Additional body parser middleware specifically for Twilio webhooks
+// This helps ensure body is parsed even if global middleware fails
+router.use(express.urlencoded({ extended: true, limit: '10mb' }));
+router.use(express.json({ limit: '10mb' }));
+
 /**
  * POST /sms/incoming
  * Handle incoming SMS messages from Twilio
  */
 router.post('/sms/incoming', async (req, res) => {
   try {
-    // Log full request body for debugging
-    console.log('Full webhook body:', JSON.stringify(req.body, null, 2));
+    // Enhanced debugging for production issues
+    console.log('=== WEBHOOK DEBUG START ===');
+    console.log('Content-Type:', req.headers['content-type']);
+    console.log('Headers:', JSON.stringify(req.headers, null, 2));
+    console.log('Body type:', typeof req.body);
+    console.log('Body keys:', Object.keys(req.body || {}));
+    console.log('Full body:', JSON.stringify(req.body, null, 2));
+    console.log('=== WEBHOOK DEBUG END ===');
 
-    const { From, Body, MessageSid } = req.body;
+    const { From, Body, MessageSid, NumMedia } = req.body;
 
     console.log(`Incoming SMS from ${From}: ${Body}`);
 
     // Validate required fields
-    if (!From || !Body) {
-      console.error('Missing From or Body in webhook:', { From, Body });
+    if (!From) {
+      console.error('Missing From field in webhook');
       return res.status(400).send('Missing required fields');
+    }
+
+    // Check if this is an MMS without text
+    const hasMedia = NumMedia && parseInt(NumMedia) > 0;
+    const hasBody = Body !== undefined && Body !== null && Body.trim() !== '';
+
+    if (!hasBody) {
+      console.log('Missing or empty Body field:', {
+        From,
+        Body,
+        bodyType: typeof Body,
+        NumMedia,
+        hasMedia,
+        allFields: Object.keys(req.body || {})
+      });
+
+      if (hasMedia) {
+        console.log('MMS received without text - sending acknowledgment');
+        const user = await User.findByPhone(From);
+        if (user) {
+          await twilioService.sendSMS(From, "I received your media message, but I can't process images yet. Can you describe it in text?");
+        }
+        return res.status(200).send('OK');
+      }
+
+      console.error('No Body and no media - this is likely a webhook parsing error');
+      return res.status(400).send('Missing message body');
     }
 
     // Find or create user
