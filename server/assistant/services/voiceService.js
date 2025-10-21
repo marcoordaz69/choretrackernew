@@ -253,11 +253,11 @@ Core capabilities:
 - Provide accountability and support
 
 User context:
-- Name: ${user.name}
-- Timezone: ${user.timezone}
-- Personality preference: ${user.aiContext.personality}
+- Name: ${user.name || 'Friend'}
+- Timezone: ${user.timezone || 'America/New_York'}
+- Personality preference: ${user.ai_context?.personality || 'supportive and motivational'}
 
-Current time: ${new Date().toLocaleString('en-US', { timeZone: user.timezone })}
+Current time: ${new Date().toLocaleString('en-US', { timeZone: user.timezone || 'America/New_York' })}
 
 Be helpful, supportive, and genuinely engaged in the conversation.`;
   }
