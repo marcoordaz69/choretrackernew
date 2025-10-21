@@ -61,8 +61,7 @@ class VoiceService {
             audio: {
               input: {
                 format: {
-                  type: 'audio/pcmu',
-                  rate: 8000
+                  type: 'audio/pcmu'
                 },
                 transcription: {
                   model: 'whisper-1'
