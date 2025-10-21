@@ -15,21 +15,48 @@ module.exports = function(app) {
    * WebSocket endpoint for voice streaming
    */
   app.ws('/assistant/voice/stream', async (ws, req) => {
-    console.log('WebSocket connection attempt:', {
-      url: req.url,
-      query: req.query,
-      headers: req.headers
+    console.log('WebSocket connection established, waiting for start message with parameters...');
+
+    // Parameters come in the Twilio "start" message, not query params
+    let userId = null;
+    let callSid = null;
+    let streamSid = null;
+
+    ws.on('message', async (message) => {
+      try {
+        const data = JSON.parse(message);
+        console.log('Received WebSocket message:', data.event);
+
+        // Extract parameters from the start message
+        if (data.event === 'start') {
+          console.log('Start message received:', JSON.stringify(data, null, 2));
+
+          streamSid = data.streamSid;
+          callSid = data.start?.callSid;
+
+          // Extract custom parameters passed via TwiML
+          const customParams = data.start?.customParameters || {};
+          userId = customParams.userId;
+
+          console.log('Extracted parameters:', { userId, callSid, streamSid });
+
+          if (!userId || !callSid) {
+            console.error('Missing userId or callSid in start message');
+            ws.close();
+            return;
+          }
+
+          // Initialize voice service with these parameters
+          await voiceService.handleVoiceStream(ws, userId, callSid);
+        }
+      } catch (error) {
+        console.error('Error processing WebSocket message:', error);
+      }
     });
 
-    const { userId, callSid } = req.query;
-
-    if (!userId || !callSid) {
-      console.error('Missing userId or callSid. Query params:', req.query);
-      ws.close();
-      return;
-    }
-
-    await voiceService.handleVoiceStream(ws, userId, callSid);
+    ws.on('close', () => {
+      console.log('WebSocket connection closed');
+    });
   });
 
   /**

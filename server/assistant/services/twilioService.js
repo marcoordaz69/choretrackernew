@@ -92,7 +92,7 @@ class TwilioService {
    * @param {string} greeting - Greeting message
    * @returns {string} - TwiML XML
    */
-  generateAIVoiceTwiML(websocketUrl, greeting = "Hey! I'm here. What's on your mind?") {
+  generateAIVoiceTwiML(websocketUrl, greeting = "Hey! I'm here. What's on your mind?", userId = null, callSid = null) {
     const response = new VoiceResponse();
 
     response.say({
@@ -100,10 +100,18 @@ class TwilioService {
     }, greeting);
 
     const connect = response.connect();
-    connect.stream({
+    const stream = connect.stream({
       url: websocketUrl,
       name: 'openai-realtime-stream'
     });
+
+    // Pass parameters through TwiML (not query string)
+    if (userId) {
+      stream.parameter({ name: 'userId', value: userId });
+    }
+    if (callSid) {
+      stream.parameter({ name: 'callSid', value: callSid });
+    }
 
     return response.toString();
   }

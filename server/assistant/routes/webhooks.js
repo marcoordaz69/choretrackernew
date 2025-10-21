@@ -138,12 +138,14 @@ router.post('/voice/incoming', async (req, res) => {
       });
     }
 
-    // Generate WebSocket URL for OpenAI Realtime API
-    const websocketUrl = `wss://${req.get('host')}/assistant/voice/stream?userId=${user.id}&callSid=${CallSid}`;
+    // Generate WebSocket URL for OpenAI Realtime API (no query params - passed via TwiML parameters)
+    const websocketUrl = `wss://${req.get('host')}/assistant/voice/stream`;
 
     const twiml = twilioService.generateAIVoiceTwiML(
       websocketUrl,
-      `Hey ${user.name}! What's on your mind?`
+      `Hey ${user.name}! What's on your mind?`,
+      user.id,
+      CallSid
     );
 
     res.type('text/xml').send(twiml);
