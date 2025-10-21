@@ -57,11 +57,14 @@ class Scheduler {
       const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
 
       // Find users whose morning check-in time matches current time
-      const users = await User.find({
-        active: true,
-        onboarded: true,
-        'preferences.morningCheckInTime': currentTime
-      });
+      // Supabase doesn't support complex JSONB queries easily, so we fetch all active users
+      // and filter in-memory (for now - can optimize with database functions later)
+      const allUsers = await User.findAll();
+      const users = allUsers.filter(user =>
+        user.active &&
+        user.onboarded &&
+        user.preferences?.morningCheckInTime === currentTime
+      );
 
       console.log(`Processing morning check-ins for ${users.length} users at ${currentTime}`);
 
@@ -73,7 +76,7 @@ class Scheduler {
         }
 
         // Generate and send morning briefing
-        const briefing = await aiService.generateMorningBriefing(user._id);
+        const briefing = await aiService.generateMorningBriefing(user.id);
         await twilioService.sendSMS(user.phone, briefing);
 
         console.log(`Morning briefing sent to ${user.name} (${user.phone})`);
@@ -91,18 +94,19 @@ class Scheduler {
       const now = new Date();
       const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
 
-      const users = await User.find({
-        active: true,
-        onboarded: true,
-        'preferences.eveningCheckInTime': currentTime
-      });
+      const allUsers = await User.findAll();
+      const users = allUsers.filter(user =>
+        user.active &&
+        user.onboarded &&
+        user.preferences?.eveningCheckInTime === currentTime
+      );
 
       console.log(`Processing evening check-ins for ${users.length} users at ${currentTime}`);
 
       for (const user of users) {
         if (user.isInQuietHours()) continue;
 
-        const reflection = await aiService.generateEveningReflection(user._id);
+        const reflection = await aiService.generateEveningReflection(user.id);
         await twilioService.sendSMS(user.phone, reflection);
 
         console.log(`Evening reflection sent to ${user.name} (${user.phone})`);
@@ -117,11 +121,12 @@ class Scheduler {
    */
   async processProactiveNudges() {
     try {
-      const users = await User.find({
-        active: true,
-        onboarded: true,
-        'preferences.nudgeFrequency': { $ne: 'off' }
-      });
+      const allUsers = await User.findAll();
+      const users = allUsers.filter(user =>
+        user.active &&
+        user.onboarded &&
+        user.preferences?.nudgeFrequency !== 'off'
+      );
 
       console.log(`Checking proactive nudges for ${users.length} users`);
 
@@ -143,28 +148,25 @@ class Scheduler {
    */
   async checkHabitReminders(user) {
     const Habit = require('../models/Habit');
-    const DailyCheckIn = require('../models/DailyCheckIn');
 
     const now = new Date();
     const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
 
     // Find habits with reminder time matching current time
-    const habits = await Habit.find({
-      userId: user._id,
-      active: true,
-      reminderTime: currentTime
-    });
+    const allHabits = await Habit.findByUserId(user.id);
+    const habits = allHabits.filter(h =>
+      h.active &&
+      h.reminderTime === currentTime
+    );
 
     for (const habit of habits) {
       // Check if already completed today
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      const logs = await habit.getLogs(1);
+      const today = new Date().toISOString().split('T')[0];
 
-      const completedToday = habit.logs.some(log => {
-        const logDate = new Date(log.date);
-        logDate.setHours(0, 0, 0, 0);
-        return logDate.getTime() === today.getTime() && log.completed;
-      });
+      const completedToday = logs.some(log =>
+        log.date === today && log.completed
+      );
 
       if (!completedToday) {
         const message = `🔔 Time for: ${habit.name}\n\nReply when done! Current streak: ${habit.streak.current} days 🔥`;
@@ -182,15 +184,16 @@ class Scheduler {
 
     // Find tasks due in the next hour that haven't been reminded about
     const oneHourFromNow = new Date(Date.now() + 60 * 60 * 1000);
+    const now = new Date();
 
-    const tasks = await Task.find({
-      userId: user._id,
-      status: 'pending',
-      dueDate: {
-        $gte: new Date(),
-        $lte: oneHourFromNow
-      }
-    }).limit(3);
+    const allTasks = await Task.findPending(user.id);
+    const tasks = allTasks
+      .filter(t => {
+        if (!t.dueDate) return false;
+        const dueDate = new Date(t.dueDate);
+        return dueDate >= now && dueDate <= oneHourFromNow;
+      })
+      .slice(0, 3);
 
     if (tasks.length > 0) {
       const taskList = tasks.map(t => `• ${t.title}`).join('\n');
@@ -208,9 +211,14 @@ class Scheduler {
     try {
       const now = new Date();
 
-      const usersToReset = await User.find({
-        'subscription.tier': 'free',
-        'subscription.resetDate': { $lte: now }
+      const allUsers = await User.findAll();
+      const usersToReset = allUsers.filter(user => {
+        const resetDate = user.subscription?.resetDate;
+        return (
+          user.subscription?.tier === 'free' &&
+          resetDate &&
+          new Date(resetDate) <= now
+        );
       });
 
       for (const user of usersToReset) {
