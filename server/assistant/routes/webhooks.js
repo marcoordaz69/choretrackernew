@@ -31,7 +31,7 @@ router.post('/sms/incoming', async (req, res) => {
       await twilioService.sendSMS(From, welcomeMessage);
 
       await Interaction.create({
-        userId: user._id,
+        userId: user.id,
         type: 'sms_outbound',
         direction: 'outbound',
         content: { assistantResponse: welcomeMessage },
@@ -58,14 +58,14 @@ router.post('/sms/incoming', async (req, res) => {
     await user.incrementMessageCount();
 
     // Process message with AI
-    const aiResponse = await aiService.processMessage(user._id, Body);
+    const aiResponse = await aiService.processMessage(user.id, Body);
 
     // Send response
     if (aiResponse.responseText) {
       await twilioService.sendSMS(From, aiResponse.responseText);
 
       await Interaction.create({
-        userId: user._id,
+        userId: user.id,
         type: 'sms_outbound',
         direction: 'outbound',
         content: { assistantResponse: aiResponse.responseText },
@@ -105,7 +105,7 @@ router.post('/voice/incoming', async (req, res) => {
     console.log(`Incoming call from ${From}, SID: ${CallSid}`);
 
     // Find user
-    const user = await User.findOne({ phone: From });
+    const user = await User.findByPhone(From);
 
     if (!user) {
       // Unknown user - reject or onboard via voice
@@ -120,7 +120,7 @@ router.post('/voice/incoming', async (req, res) => {
     }
 
     // Generate WebSocket URL for OpenAI Realtime API
-    const websocketUrl = `wss://${req.get('host')}/assistant/voice/stream?userId=${user._id}&callSid=${CallSid}`;
+    const websocketUrl = `wss://${req.get('host')}/assistant/voice/stream?userId=${user.id}&callSid=${CallSid}`;
 
     const twiml = twilioService.generateAIVoiceTwiML(
       websocketUrl,
