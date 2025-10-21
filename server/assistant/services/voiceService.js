@@ -41,7 +41,8 @@ class VoiceService {
         callSid,
         streamSid: null,
         transcript: '',
-        startTime: Date.now()
+        startTime: Date.now(),
+        lastAssistantItem: null
       };
 
       this.activeSessions.set(callSid, session);
@@ -186,6 +187,11 @@ class VoiceService {
       case 'response.output_audio.delta':
         // Stream audio back to Twilio (GA format)
         if (session.twilioWs.readyState === WebSocket.OPEN && event.delta) {
+          // Track the assistant item for interruption handling
+          if (event.item_id && event.item_id !== session.lastAssistantItem) {
+            session.lastAssistantItem = event.item_id;
+          }
+
           session.twilioWs.send(JSON.stringify({
             event: 'media',
             streamSid: session.streamSid,
@@ -193,6 +199,33 @@ class VoiceService {
               payload: event.delta
             }
           }));
+        }
+        break;
+
+      case 'input_audio_buffer.speech_started':
+        // Handle interruption when user starts speaking
+        console.log('Speech started detected - handling interruption');
+        if (session.lastAssistantItem) {
+          console.log('Interrupting response with id:', session.lastAssistantItem);
+
+          // Send truncate event to OpenAI
+          session.openAIWs.send(JSON.stringify({
+            type: 'conversation.item.truncate',
+            item_id: session.lastAssistantItem,
+            content_index: 0,
+            audio_end_ms: 0
+          }));
+
+          // Clear Twilio's audio buffer
+          if (session.twilioWs.readyState === WebSocket.OPEN && session.streamSid) {
+            session.twilioWs.send(JSON.stringify({
+              event: 'clear',
+              streamSid: session.streamSid
+            }));
+          }
+
+          // Reset tracking
+          session.lastAssistantItem = null;
         }
         break;
 
