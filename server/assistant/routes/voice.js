@@ -15,14 +15,19 @@ module.exports = function(app) {
    * WebSocket endpoint for voice streaming
    */
   app.ws('/assistant/voice/stream', async (ws, req) => {
+    console.log('WebSocket connection attempt');
+    console.log('Query params:', req.query);
+    console.log('Full URL:', req.url);
+
     const { userId, callSid } = req.query;
 
     if (!userId || !callSid) {
-      console.error('Missing userId or callSid');
+      console.error('Missing userId or callSid:', { userId, callSid, query: req.query });
       ws.close();
       return;
     }
 
+    console.log(`WebSocket connected for user ${userId}, call ${callSid}`);
     await voiceService.handleVoiceStream(ws, userId, callSid);
   });
 

@@ -167,6 +167,7 @@ router.post('/voice/incoming', async (req, res) => {
     const user = await User.findByPhone(From);
 
     if (!user) {
+      console.log(`User not found for phone: ${From}`);
       // Unknown user - reject or onboard via voice
       const twiml = `
         <?xml version="1.0" encoding="UTF-8"?>
@@ -178,13 +179,21 @@ router.post('/voice/incoming', async (req, res) => {
       return res.type('text/xml').send(twiml);
     }
 
+    console.log(`User found: ${user.name} (ID: ${user.id})`);
+
     // Generate WebSocket URL for OpenAI Realtime API
-    const websocketUrl = `wss://${req.get('host')}/assistant/voice/stream?userId=${user.id}&callSid=${CallSid}`;
+    const host = req.get('host');
+    const websocketUrl = `wss://${host}/assistant/voice/stream?userId=${user.id}&callSid=${CallSid}`;
+
+    console.log(`Generated WebSocket URL: ${websocketUrl}`);
 
     const twiml = twilioService.generateAIVoiceTwiML(
       websocketUrl,
       `Hey ${user.name}! What's on your mind?`
     );
+
+    console.log(`Sending TwiML response (${twiml.length} bytes)`);
+    console.log(`TwiML: ${twiml}`);
 
     res.type('text/xml').send(twiml);
 
