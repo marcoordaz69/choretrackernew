@@ -51,17 +51,24 @@ class VoiceService {
       openAIWs.on('open', () => {
         console.log('OpenAI Realtime API connected');
 
-        // Send session configuration
+        // Send session configuration (GA format)
         openAIWs.send(JSON.stringify({
           type: 'session.update',
           session: {
-            modalities: ['text', 'audio'],
+            type: 'realtime',
+            model: 'gpt-realtime-2025-08-28',
             instructions: this.getVoiceInstructions(user),
-            voice: 'alloy',
-            input_audio_format: 'g711_ulaw',
-            output_audio_format: 'g711_ulaw',
-            input_audio_transcription: {
-              model: 'whisper-1'
+            audio: {
+              input: {
+                format: 'g711_ulaw',
+                transcription: {
+                  model: 'whisper-1'
+                }
+              },
+              output: {
+                format: 'g711_ulaw',
+                voice: 'alloy'
+              }
             },
             turn_detection: {
               type: 'server_vad',
@@ -181,8 +188,8 @@ class VoiceService {
         session.transcript += `User: ${userTranscript}\n`;
         break;
 
-      case 'response.audio.delta':
-        // Stream audio back to Twilio
+      case 'response.output_audio.delta':
+        // Stream audio back to Twilio (GA format)
         if (session.twilioWs.readyState === WebSocket.OPEN && event.delta) {
           session.twilioWs.send(JSON.stringify({
             event: 'media',
@@ -194,12 +201,12 @@ class VoiceService {
         }
         break;
 
-      case 'response.audio_transcript.delta':
+      case 'response.output_audio_transcript.delta':
         // AI's speech transcribed (partial)
         break;
 
-      case 'response.audio_transcript.done':
-        // AI's complete response
+      case 'response.output_audio_transcript.done':
+        // AI's complete response (GA format)
         const aiTranscript = event.transcript;
         console.log('AI said:', aiTranscript);
         session.transcript += `Assistant: ${aiTranscript}\n`;
