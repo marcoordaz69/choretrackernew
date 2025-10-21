@@ -125,6 +125,19 @@ class User {
   }
 
   /**
+   * Find all users
+   */
+  static async findAll() {
+    const { data, error } = await supabase
+      .from('assistant_users')
+      .select('*');
+
+    if (error) throw error;
+
+    return data.map(user => new User(user));
+  }
+
+  /**
    * Find all active users
    */
   static async findActive() {
