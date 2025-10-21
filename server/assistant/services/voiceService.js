@@ -56,6 +56,7 @@ class VoiceService {
           session: {
             type: 'realtime',
             model: 'gpt-realtime',
+            output_modalities: ['audio'],
             instructions: this.getVoiceInstructions(user),
             audio: {
               input: {
@@ -76,10 +77,7 @@ class VoiceService {
                 },
                 voice: 'alloy'
               }
-            },
-            tools: this.getVoiceTools(),
-            tool_choice: 'auto',
-            temperature: 0.7
+            }
           }
         }));
       });
