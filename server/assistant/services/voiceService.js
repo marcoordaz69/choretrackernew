@@ -202,11 +202,16 @@ class VoiceService {
       'response.done', 'input_audio_buffer.committed',
       'input_audio_buffer.speech_stopped', 'input_audio_buffer.speech_started',
       'session.created', 'session.updated', 'response.created',
-      'conversation.item.created', 'conversation.item.input_audio_transcription.completed'
+      'conversation.item.created', 'conversation.item.input_audio_transcription.completed',
+      'response.output_audio.delta', 'response.output_audio.done'
     ];
 
     if (logEventTypes.includes(event.type)) {
-      console.log('OpenAI event:', event.type, JSON.stringify(event).substring(0, 200));
+      if (event.type === 'response.output_audio.delta') {
+        console.log('OpenAI event: response.output_audio.delta - delta length:', event.delta ? event.delta.length : 'NO DELTA');
+      } else {
+        console.log('OpenAI event:', event.type, JSON.stringify(event).substring(0, 200));
+      }
     }
 
     switch (event.type) {
@@ -227,32 +232,53 @@ class VoiceService {
 
       case 'response.output_audio.delta':
         // Stream audio back to Twilio (GA format)
-        if (session.twilioWs.readyState === WebSocket.OPEN && event.delta) {
-          // Track start timestamp for new responses
-          if (event.item_id && event.item_id !== session.lastAssistantItem) {
-            session.responseStartTimestampTwilio = session.latestMediaTimestamp;
-            session.lastAssistantItem = event.item_id;
-            console.log(`New response started at timestamp: ${session.responseStartTimestampTwilio}ms`);
-          }
+        if (!event.delta) {
+          console.error('No delta in response.output_audio.delta event!');
+          break;
+        }
 
-          // Send audio to Twilio
+        if (session.twilioWs.readyState !== WebSocket.OPEN) {
+          console.error('Twilio WebSocket not open, cannot send audio, state:', session.twilioWs.readyState);
+          break;
+        }
+
+        // Track start timestamp for new responses
+        if (event.item_id && event.item_id !== session.lastAssistantItem) {
+          session.responseStartTimestampTwilio = session.latestMediaTimestamp;
+          session.lastAssistantItem = event.item_id;
+          console.log(`New response started at timestamp: ${session.responseStartTimestampTwilio}ms`);
+
+          // Track audio chunk count for this response
+          if (!session.audioChunkCount) {
+            session.audioChunkCount = 0;
+          }
+          session.audioChunkCount = 0;
+        }
+
+        session.audioChunkCount = (session.audioChunkCount || 0) + 1;
+
+        // Log first few chunks
+        if (session.audioChunkCount <= 3) {
+          console.log(`Sending audio chunk ${session.audioChunkCount} to Twilio, delta length: ${event.delta.length}`);
+        }
+
+        // Send audio to Twilio
+        session.twilioWs.send(JSON.stringify({
+          event: 'media',
+          streamSid: session.streamSid,
+          media: {
+            payload: event.delta
+          }
+        }));
+
+        // Send mark to track playback
+        if (session.streamSid) {
           session.twilioWs.send(JSON.stringify({
-            event: 'media',
+            event: 'mark',
             streamSid: session.streamSid,
-            media: {
-              payload: event.delta
-            }
+            mark: { name: 'responsePart' }
           }));
-
-          // Send mark to track playback
-          if (session.streamSid) {
-            session.twilioWs.send(JSON.stringify({
-              event: 'mark',
-              streamSid: session.streamSid,
-              mark: { name: 'responsePart' }
-            }));
-            session.markQueue.push('responsePart');
-          }
+          session.markQueue.push('responsePart');
         }
         break;
 
