@@ -125,19 +125,17 @@ router.post('/voice/incoming', async (req, res) => {
 
     console.log(`Incoming call from ${From}, SID: ${CallSid}`);
 
-    // Find user
-    const user = await User.findByPhone(From);
+    // Find or create user
+    let user = await User.findByPhone(From);
 
     if (!user) {
-      // Unknown user - reject or onboard via voice
-      const twiml = `
-        <?xml version="1.0" encoding="UTF-8"?>
-        <Response>
-          <Say>Sorry, I don't recognize this number. Please text me first to get started.</Say>
-          <Hangup/>
-        </Response>
-      `;
-      return res.type('text/xml').send(twiml);
+      // New user - create with basic info for voice interaction
+      console.log(`Creating new user for voice call: ${From}`);
+      user = await User.create({
+        phone: From,
+        name: 'Friend',
+        onboarded: false
+      });
     }
 
     // Generate WebSocket URL for OpenAI Realtime API
