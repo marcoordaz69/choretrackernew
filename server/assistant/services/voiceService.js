@@ -59,21 +59,23 @@ class VoiceService {
             instructions: this.getVoiceInstructions(user),
             audio: {
               input: {
-                format: 'g711_ulaw',
+                format: {
+                  type: 'audio/pcmu',
+                  rate: 8000
+                },
                 transcription: {
                   model: 'whisper-1'
+                },
+                turn_detection: {
+                  type: 'semantic_vad'
                 }
               },
               output: {
-                format: 'g711_ulaw',
+                format: {
+                  type: 'audio/pcmu'
+                },
                 voice: 'alloy'
               }
-            },
-            turn_detection: {
-              type: 'server_vad',
-              threshold: 0.5,
-              prefix_padding_ms: 300,
-              silence_duration_ms: 500
             },
             tools: this.getVoiceTools(),
             tool_choice: 'auto',
