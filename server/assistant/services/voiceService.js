@@ -262,12 +262,16 @@ class VoiceService {
           console.log(`Sending audio chunk ${session.audioChunkCount} to Twilio, delta length: ${event.delta.length}`);
         }
 
+        // Normalize base64 encoding (decode then re-encode)
+        // OpenAI sends base64, but we need to normalize it for Twilio
+        const audioPayload = Buffer.from(event.delta, 'base64').toString('base64');
+
         // Send audio to Twilio
         session.twilioWs.send(JSON.stringify({
           event: 'media',
           streamSid: session.streamSid,
           media: {
-            payload: event.delta
+            payload: audioPayload
           }
         }));
 
