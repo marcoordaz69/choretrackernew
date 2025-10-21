@@ -232,6 +232,10 @@ class VoiceService {
 
       case 'response.output_audio.delta':
         // Stream audio back to Twilio (GA format)
+        console.log('[AUDIO DEBUG] Received audio delta, length:', event.delta ? event.delta.length : 'NO DELTA');
+        console.log('[AUDIO DEBUG] Twilio WS state:', session.twilioWs ? session.twilioWs.readyState : 'NO WEBSOCKET');
+        console.log('[AUDIO DEBUG] Stream SID:', session.streamSid || 'NO STREAM SID');
+
         if (!event.delta) {
           console.error('No delta in response.output_audio.delta event!');
           break;
@@ -266,14 +270,21 @@ class VoiceService {
         // OpenAI sends base64, but we need to normalize it for Twilio
         const audioPayload = Buffer.from(event.delta, 'base64').toString('base64');
 
+        console.log('[AUDIO DEBUG] Sending audio to Twilio, payload length:', audioPayload.length);
+
         // Send audio to Twilio
-        session.twilioWs.send(JSON.stringify({
-          event: 'media',
-          streamSid: session.streamSid,
-          media: {
-            payload: audioPayload
-          }
-        }));
+        try {
+          session.twilioWs.send(JSON.stringify({
+            event: 'media',
+            streamSid: session.streamSid,
+            media: {
+              payload: audioPayload
+            }
+          }));
+          console.log('[AUDIO DEBUG] ✅ Audio sent successfully to Twilio');
+        } catch (error) {
+          console.error('[AUDIO DEBUG] ❌ Error sending audio to Twilio:', error.message);
+        }
 
         // Send mark to track playback
         if (session.streamSid) {
