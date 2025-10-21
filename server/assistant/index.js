@@ -12,11 +12,14 @@ function initializeAssistant(app) {
   console.log('Initializing Personal Assistant...');
 
   // Enable WebSocket support
-  expressWs(app);
+  const wsInstance = expressWs(app);
 
   // Mount routes
   app.use('/assistant/webhooks', webhookRoutes);
-  app.use('/assistant/voice', voiceRoutes);
+
+  // Initialize voice routes with WebSocket support
+  const voiceRouter = voiceRoutes(wsInstance.app);
+  app.use('/assistant/voice', voiceRouter);
 
   // Start scheduler for proactive check-ins
   scheduler.start();

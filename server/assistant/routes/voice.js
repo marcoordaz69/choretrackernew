@@ -1,39 +1,47 @@
 const express = require('express');
-const router = express.Router();
 const voiceService = require('../services/voiceService');
 const twilioService = require('../services/twilioService');
 
 /**
- * GET /stream
- * WebSocket endpoint for voice streaming
+ * Initialize voice routes with WebSocket support
+ * @param {express.Application} app - WebSocket-enabled Express app
+ * @returns {express.Router} Router instance
  */
-router.ws('/stream', async (ws, req) => {
-  const { userId, callSid } = req.query;
+module.exports = function(app) {
+  const router = express.Router();
 
-  if (!userId || !callSid) {
-    console.error('Missing userId or callSid');
-    ws.close();
-    return;
-  }
+  /**
+   * GET /stream
+   * WebSocket endpoint for voice streaming
+   */
+  app.ws('/assistant/voice/stream', async (ws, req) => {
+    const { userId, callSid } = req.query;
 
-  await voiceService.handleVoiceStream(ws, userId, callSid);
-});
+    if (!userId || !callSid) {
+      console.error('Missing userId or callSid');
+      ws.close();
+      return;
+    }
 
-/**
- * POST /outbound-reflection
- * TwiML for outbound reflection calls
- */
-router.post('/outbound-reflection', (req, res) => {
-  const { userId } = req.query;
+    await voiceService.handleVoiceStream(ws, userId, callSid);
+  });
 
-  const websocketUrl = `wss://${req.get('host')}/assistant/voice/stream?userId=${userId}&callSid=${req.body.CallSid}`;
+  /**
+   * POST /outbound-reflection
+   * TwiML for outbound reflection calls
+   */
+  router.post('/outbound-reflection', (req, res) => {
+    const { userId } = req.query;
 
-  const twiml = twilioService.generateAIVoiceTwiML(
-    websocketUrl,
-    "Hey! Let's do a quick reflection on your day. Ready?"
-  );
+    const websocketUrl = `wss://${req.get('host')}/assistant/voice/stream?userId=${userId}&callSid=${req.body.CallSid}`;
 
-  res.type('text/xml').send(twiml);
-});
+    const twiml = twilioService.generateAIVoiceTwiML(
+      websocketUrl,
+      "Hey! Let's do a quick reflection on your day. Ready?"
+    );
 
-module.exports = router;
+    res.type('text/xml').send(twiml);
+  });
+
+  return router;
+};
