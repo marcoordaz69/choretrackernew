@@ -23,13 +23,12 @@ class VoiceService {
 
       console.log(`Voice stream started for ${user.name} (${callSid})`);
 
-      // Create OpenAI Realtime API WebSocket connection
+      // Create OpenAI Realtime API WebSocket connection (GA)
       const openAIWs = new WebSocket(
-        'wss://api.openai.com/v1/realtime?model=gpt-realtime-2025-08-28',
+        'wss://api.openai.com/v1/realtime?model=gpt-realtime',
         {
           headers: {
-            'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-            'OpenAI-Beta': 'realtime=v1'
+            'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
           }
         }
       );
@@ -55,7 +54,8 @@ class VoiceService {
         openAIWs.send(JSON.stringify({
           type: 'session.update',
           session: {
-            model: 'gpt-realtime-2025-08-28',
+            type: 'realtime',
+            model: 'gpt-realtime',
             instructions: this.getVoiceInstructions(user),
             audio: {
               input: {
