@@ -1,0 +1,203 @@
+/**
+ * ElevenLabs + Twilio WebSocket Bridge
+ *
+ * Simple bridge to connect Twilio phone calls to ElevenLabs Conversational AI
+ * No dashboard setup required - everything via API!
+ */
+
+const express = require('express');
+const expressWs = require('express-ws');
+const WebSocket = require('ws');
+const twilio = require('twilio');
+const VoiceResponse = twilio.twiml.VoiceResponse;
+
+// Configuration
+const ELEVENLABS_AGENT_ID = process.env.ELEVENLABS_AGENT_ID;
+const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
+
+/**
+ * Get signed URL for ElevenLabs conversation
+ */
+async function getElevenLabsSignedUrl(agentId) {
+  const url = `https://api.elevenlabs.io/v1/convai/conversation/get_signed_url?agent_id=${agentId}`;
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'xi-api-key': ELEVENLABS_API_KEY
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to get signed URL: ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  return data.signed_url;
+}
+
+/**
+ * Setup routes for Twilio integration
+ */
+function setupElevenLabsRoutes(app) {
+  /**
+   * POST /elevenlabs/call/incoming
+   * Handle incoming Twilio call - return TwiML to stream audio
+   */
+  app.post('/elevenlabs/call/incoming', (req, res) => {
+    console.log('[ElevenLabs] Incoming call from:', req.body.From);
+
+    const response = new VoiceResponse();
+    const connect = response.connect();
+
+    // Stream audio to our WebSocket endpoint
+    connect.stream({
+      url: `wss://${req.headers.host}/elevenlabs/media-stream`
+    });
+
+    res.type('text/xml');
+    res.send(response.toString());
+  });
+
+  /**
+   * WebSocket /elevenlabs/media-stream
+   * Bridge between Twilio and ElevenLabs
+   */
+  app.ws('/elevenlabs/media-stream', async (twilioWs, req) => {
+    console.log('[ElevenLabs] WebSocket connection established');
+
+    let elevenLabsWs;
+    let streamSid = null;
+
+    try {
+      // Get signed URL from ElevenLabs
+      const signedUrl = await getElevenLabsSignedUrl(ELEVENLABS_AGENT_ID);
+      console.log('[ElevenLabs] Got signed URL, connecting...');
+
+      // Connect to ElevenLabs
+      elevenLabsWs = new WebSocket(signedUrl);
+
+      // ElevenLabs → Twilio: Forward audio responses
+      elevenLabsWs.on('message', (data) => {
+        try {
+          const message = JSON.parse(data);
+
+          // Handle different ElevenLabs event types
+          switch (message.type) {
+            case 'audio':
+              // Forward audio chunk to Twilio
+              if (streamSid && twilioWs.readyState === WebSocket.OPEN) {
+                const audioMessage = {
+                  event: 'media',
+                  streamSid: streamSid,
+                  media: {
+                    payload: message.audio_event.audio_base_64
+                  }
+                };
+                twilioWs.send(JSON.stringify(audioMessage));
+              }
+              break;
+
+            case 'interruption':
+              // Clear Twilio's audio buffer when user interrupts
+              if (streamSid && twilioWs.readyState === WebSocket.OPEN) {
+                twilioWs.send(JSON.stringify({
+                  event: 'clear',
+                  streamSid: streamSid
+                }));
+              }
+              break;
+
+            case 'agent_response':
+              console.log('[ElevenLabs] Agent:', message.agent_response_event.agent_response);
+              break;
+
+            case 'user_transcript':
+              console.log('[ElevenLabs] User:', message.user_transcription_event.user_transcript);
+              break;
+
+            case 'ping':
+              // Respond to keepalive
+              if (elevenLabsWs.readyState === WebSocket.OPEN) {
+                elevenLabsWs.send(JSON.stringify({
+                  type: 'pong',
+                  event_id: message.ping_event.event_id
+                }));
+              }
+              break;
+          }
+        } catch (error) {
+          console.error('[ElevenLabs] Error processing message:', error);
+        }
+      });
+
+      elevenLabsWs.on('open', () => {
+        console.log('[ElevenLabs] Connected to ElevenLabs');
+      });
+
+      elevenLabsWs.on('error', (error) => {
+        console.error('[ElevenLabs] WebSocket error:', error);
+      });
+
+      elevenLabsWs.on('close', () => {
+        console.log('[ElevenLabs] Disconnected from ElevenLabs');
+      });
+
+      // Twilio → ElevenLabs: Forward user audio
+      twilioWs.on('message', (message) => {
+        try {
+          const msg = JSON.parse(message);
+
+          switch (msg.event) {
+            case 'start':
+              streamSid = msg.start.streamSid;
+              console.log('[Twilio] Stream started:', streamSid);
+              break;
+
+            case 'media':
+              // Forward audio to ElevenLabs
+              if (elevenLabsWs.readyState === WebSocket.OPEN) {
+                elevenLabsWs.send(JSON.stringify({
+                  user_audio_chunk: Buffer.from(msg.media.payload, 'base64').toString('base64')
+                }));
+              }
+              break;
+
+            case 'stop':
+              console.log('[Twilio] Stream stopped');
+              if (elevenLabsWs) {
+                elevenLabsWs.close();
+              }
+              break;
+          }
+        } catch (error) {
+          console.error('[Twilio] Error processing message:', error);
+        }
+      });
+
+      twilioWs.on('close', () => {
+        console.log('[Twilio] WebSocket closed');
+        if (elevenLabsWs) {
+          elevenLabsWs.close();
+        }
+      });
+
+      twilioWs.on('error', (error) => {
+        console.error('[Twilio] WebSocket error:', error);
+      });
+
+    } catch (error) {
+      console.error('[ElevenLabs] Setup error:', error);
+      twilioWs.close();
+    }
+  });
+
+  console.log('[ElevenLabs] Routes configured:');
+  console.log('  - POST /elevenlabs/call/incoming (Twilio webhook)');
+  console.log('  - WS /elevenlabs/media-stream (Audio bridge)');
+}
+
+module.exports = {
+  setupElevenLabsRoutes,
+  getElevenLabsSignedUrl
+};
