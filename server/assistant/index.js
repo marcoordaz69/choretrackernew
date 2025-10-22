@@ -26,7 +26,16 @@ function initializeAssistant(app, server) {
   app.use('/assistant/voice', voiceRouter);
 
   // Setup ElevenLabs Twilio bridge (WebSocket)
-  setupElevenLabsRoutes(wsInstance.app);
+  try {
+    console.log('[INIT] Setting up ElevenLabs routes...');
+    console.log('[INIT] wsInstance.app type:', typeof wsInstance.app);
+    console.log('[INIT] wsInstance.app.ws exists:', typeof wsInstance.app.ws);
+    setupElevenLabsRoutes(wsInstance.app);
+    console.log('[INIT] ElevenLabs routes setup completed');
+  } catch (error) {
+    console.error('[INIT] Error setting up ElevenLabs routes:', error);
+    console.error('[INIT] Stack trace:', error.stack);
+  }
 
   // Start scheduler for proactive check-ins
   scheduler.start();
