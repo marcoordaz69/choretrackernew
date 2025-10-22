@@ -452,14 +452,20 @@ Be helpful, supportive, and genuinely engaged in the conversation.`;
 
   /**
    * Get function tools for voice calls
-   * Returns tools in Realtime API format (same as Chat Completions)
+   * Returns tools in Realtime API format (FLATTENED, not nested like Chat Completions)
    */
   getVoiceTools() {
     const aiService = require('./aiService');
     const chatTools = aiService.getFunctionTools();
 
-    // Realtime API uses same format as Chat Completions: {type: 'function', function: {...}}
-    return chatTools;
+    // Realtime API expects flattened format: {type, name, description, parameters}
+    // Chat Completions uses nested: {type: 'function', function: {name, description, parameters}}
+    return chatTools.map(tool => ({
+      type: tool.type,
+      name: tool.function.name,
+      description: tool.function.description,
+      parameters: tool.function.parameters
+    }));
   }
 
   /**
