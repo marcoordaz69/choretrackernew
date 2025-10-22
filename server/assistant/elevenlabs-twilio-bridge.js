@@ -40,10 +40,16 @@ async function getElevenLabsSignedUrl(agentId) {
  * Setup routes for Twilio integration
  */
 function setupElevenLabsRoutes(app) {
+  console.log('[ElevenLabs Bridge] setupElevenLabsRoutes called');
+  console.log('[ElevenLabs Bridge] app type:', typeof app);
+  console.log('[ElevenLabs Bridge] app.post exists:', typeof app.post);
+  console.log('[ElevenLabs Bridge] app.ws exists:', typeof app.ws);
+
   /**
    * POST /elevenlabs/call/incoming
    * Handle incoming Twilio call - return TwiML to stream audio
    */
+  console.log('[ElevenLabs Bridge] Setting up POST /elevenlabs/call/incoming');
   app.post('/elevenlabs/call/incoming', (req, res) => {
     console.log('[ElevenLabs] Incoming call from:', req.body.From);
 
@@ -63,6 +69,7 @@ function setupElevenLabsRoutes(app) {
    * WebSocket /elevenlabs/media-stream
    * Bridge between Twilio and ElevenLabs
    */
+  console.log('[ElevenLabs Bridge] Setting up WS /elevenlabs/media-stream');
   app.ws('/elevenlabs/media-stream', async (twilioWs, req) => {
     console.log('[ElevenLabs] WebSocket connection established');
 
