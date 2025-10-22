@@ -12,7 +12,7 @@ class VoiceService {
    * Handle WebSocket connection for voice call
    * Connects Twilio Media Stream <-> OpenAI Realtime API
    */
-  async handleVoiceStream(ws, userId, callSid) {
+  async handleVoiceStream(ws, userId, callSid, streamSid) {
     try {
       const user = await User.findById(userId);
       if (!user) {
@@ -33,13 +33,13 @@ class VoiceService {
         }
       );
 
-      // Store session
+      // Store session with streamSid passed from route
       const session = {
         twilioWs: ws,
         openAIWs,
         userId,
         callSid,
-        streamSid: null,
+        streamSid: streamSid,  // ← Set from parameter, not null!
         transcript: '',
         startTime: Date.now(),
         lastAssistantItem: null,
@@ -50,6 +50,7 @@ class VoiceService {
       };
 
       this.activeSessions.set(callSid, session);
+      console.log(`[STREAM SID FIX] Session initialized with streamSid: ${streamSid}`);
 
       // OpenAI WebSocket event handlers
       openAIWs.on('open', () => {

@@ -40,14 +40,14 @@ module.exports = function(app) {
 
           console.log('Extracted parameters:', { userId, callSid, streamSid });
 
-          if (!userId || !callSid) {
-            console.error('Missing userId or callSid in start message');
+          if (!userId || !callSid || !streamSid) {
+            console.error('Missing userId, callSid, or streamSid in start message');
             ws.close();
             return;
           }
 
-          // Initialize voice service with these parameters
-          await voiceService.handleVoiceStream(ws, userId, callSid);
+          // Initialize voice service with these parameters INCLUDING streamSid
+          await voiceService.handleVoiceStream(ws, userId, callSid, streamSid);
         }
       } catch (error) {
         console.error('Error processing WebSocket message:', error);
