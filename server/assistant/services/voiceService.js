@@ -57,13 +57,14 @@ class VoiceService {
         console.log('OpenAI Realtime API connected');
 
         // Send session configuration (GA format)
-        openAIWs.send(JSON.stringify({
+        const sessionConfig = {
           type: 'session.update',
           session: {
             type: 'realtime',
             model: 'gpt-realtime',
             output_modalities: ['audio'],
             instructions: this.getVoiceInstructions(user),
+            tools: this.getVoiceTools(),
             audio: {
               input: {
                 format: {
@@ -81,7 +82,10 @@ class VoiceService {
               }
             }
           }
-        }));
+        };
+
+        console.log(`[SESSION CONFIG] Sending ${sessionConfig.session.tools.length} function tools to OpenAI`);
+        openAIWs.send(JSON.stringify(sessionConfig));
       });
 
       openAIWs.on('message', async (data) => {
@@ -204,7 +208,8 @@ class VoiceService {
       'input_audio_buffer.speech_stopped', 'input_audio_buffer.speech_started',
       'session.created', 'session.updated', 'response.created',
       'conversation.item.created', 'conversation.item.input_audio_transcription.completed',
-      'response.output_audio.delta', 'response.output_audio.done'
+      'response.output_audio.delta', 'response.output_audio.done',
+      'response.output_item.done', 'response.output_audio_transcript.done'
     ];
 
     if (logEventTypes.includes(event.type)) {
@@ -343,25 +348,34 @@ class VoiceService {
         session.transcript += `Assistant: ${aiTranscript}\n`;
         break;
 
-      case 'response.function_call_arguments.done':
-        // Function call completed
-        const functionName = event.name;
-        const args = JSON.parse(event.arguments);
-        console.log('Function call:', functionName, args);
+      case 'response.output_item.done':
+        // Check if this is a function call
+        if (event.item && event.item.type === 'function_call') {
+          const functionName = event.item.name;
+          const args = JSON.parse(event.item.arguments);
+          console.log('[FUNCTION CALL] Executing:', functionName, args);
 
-        // Execute function
-        const aiService = require('./aiService');
-        const result = await aiService.executeFunctionCall(session.userId, functionName, args);
+          // Execute function
+          const aiService = require('./aiService');
+          const result = await aiService.executeFunctionCall(session.userId, functionName, args);
 
-        // Send result back to OpenAI
-        session.openAIWs.send(JSON.stringify({
-          type: 'conversation.item.create',
-          item: {
-            type: 'function_call_output',
-            call_id: event.call_id,
-            output: JSON.stringify(result)
-          }
-        }));
+          console.log('[FUNCTION CALL] Result:', result);
+
+          // Send result back to OpenAI
+          session.openAIWs.send(JSON.stringify({
+            type: 'conversation.item.create',
+            item: {
+              type: 'function_call_output',
+              call_id: event.item.call_id,
+              output: JSON.stringify(result)
+            }
+          }));
+
+          // Trigger a new response with the function result
+          session.openAIWs.send(JSON.stringify({
+            type: 'response.create'
+          }));
+        }
         break;
 
       case 'error':
