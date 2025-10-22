@@ -2,6 +2,8 @@ const express = require('express');
 const expressWs = require('express-ws');
 const webhookRoutes = require('./routes/webhooks');
 const voiceRoutes = require('./routes/voice');
+const elevenlabsWebhookRoutes = require('./routes/elevenlabs-webhooks');
+const { setupElevenLabsRoutes } = require('./elevenlabs-twilio-bridge');
 const scheduler = require('./services/scheduler');
 
 /**
@@ -17,10 +19,14 @@ function initializeAssistant(app, server) {
 
   // Mount routes
   app.use('/assistant/webhooks', webhookRoutes);
+  app.use('/assistant/elevenlabs', elevenlabsWebhookRoutes);
 
   // Initialize voice routes with WebSocket support
   const voiceRouter = voiceRoutes(wsInstance.app);
   app.use('/assistant/voice', voiceRouter);
+
+  // Setup ElevenLabs Twilio bridge (WebSocket)
+  setupElevenLabsRoutes(wsInstance.app);
 
   // Start scheduler for proactive check-ins
   scheduler.start();
@@ -29,6 +35,8 @@ function initializeAssistant(app, server) {
   console.log('  - SMS webhooks: /assistant/webhooks/sms/incoming');
   console.log('  - Voice webhooks: /assistant/webhooks/voice/incoming');
   console.log('  - Voice stream: ws://your-domain/assistant/voice/stream');
+  console.log('  - ElevenLabs call: /elevenlabs/call/incoming');
+  console.log('  - ElevenLabs stream: ws://your-domain/elevenlabs/media-stream');
 }
 
 /**
