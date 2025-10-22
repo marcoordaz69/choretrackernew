@@ -141,9 +141,14 @@ router.post('/voice/incoming', async (req, res) => {
     // Generate WebSocket URL for OpenAI Realtime API (no query params - passed via TwiML parameters)
     const websocketUrl = `wss://${req.get('host')}/assistant/voice/stream`;
 
+    // Different greeting based on onboarding status
+    const greeting = user.onboarded
+      ? `Hey ${user.name}! What's on your mind?`
+      : `Hey! Thanks for calling. Let me connect you with your assistant.`;
+
     const twiml = twilioService.generateAIVoiceTwiML(
       websocketUrl,
-      `Hey ${user.name}! What's on your mind?`,
+      greeting,
       user.id,
       CallSid
     );

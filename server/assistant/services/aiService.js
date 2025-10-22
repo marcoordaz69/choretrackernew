@@ -191,6 +191,45 @@ When user asks questions, provide helpful, concise answers.`;
             required: ['title', 'timeframe']
           }
         }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'update_user_profile',
+          description: 'Update user profile information during onboarding or when user provides new details',
+          parameters: {
+            type: 'object',
+            properties: {
+              name: {
+                type: 'string',
+                description: 'User\'s preferred name'
+              },
+              timezone: {
+                type: 'string',
+                description: 'User\'s timezone (e.g., America/New_York)'
+              },
+              onboarded: {
+                type: 'boolean',
+                description: 'Mark user as onboarded after initial conversation'
+              },
+              aiContext: {
+                type: 'object',
+                description: 'AI-specific context like personality preferences',
+                properties: {
+                  personality: {
+                    type: 'string',
+                    description: 'Preferred AI personality (e.g., supportive, motivational, direct)'
+                  },
+                  interests: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    description: 'User\'s interests and focus areas'
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     ];
   }
@@ -348,6 +387,37 @@ When user asks questions, provide helpful, concise answers.`;
             } : undefined
           });
           return { type: 'goal_created', data: goal };
+
+        case 'update_user_profile':
+          const user = await User.findById(userId);
+          if (!user) {
+            return { type: 'error', error: 'User not found' };
+          }
+
+          // Update fields if provided
+          if (args.name) user.name = args.name;
+          if (args.timezone) user.timezone = args.timezone;
+          if (args.onboarded !== undefined) user.onboarded = args.onboarded;
+
+          // Update AI context
+          if (args.aiContext) {
+            user.ai_context = {
+              ...(user.ai_context || {}),
+              ...args.aiContext
+            };
+          }
+
+          await user.save();
+          console.log(`User profile updated:`, { name: user.name, onboarded: user.onboarded });
+
+          return {
+            type: 'profile_updated',
+            data: {
+              name: user.name,
+              onboarded: user.onboarded,
+              aiContext: user.ai_context
+            }
+          };
 
         default:
           console.warn(`Unknown function: ${functionName}`);
