@@ -93,6 +93,9 @@ function setupElevenLabsRoutes(app) {
           switch (message.type) {
             case 'audio':
               // Forward audio chunk to Twilio
+              console.log('[ElevenLabs] Audio event received, payload length:', message.audio_event?.audio_base_64?.length || 0);
+              console.log('[ElevenLabs] streamSid:', streamSid, 'twilioWs ready:', twilioWs.readyState === WebSocket.OPEN);
+
               if (streamSid && twilioWs.readyState === WebSocket.OPEN) {
                 const audioMessage = {
                   event: 'media',
@@ -102,6 +105,9 @@ function setupElevenLabsRoutes(app) {
                   }
                 };
                 twilioWs.send(JSON.stringify(audioMessage));
+                console.log('[ElevenLabs] Audio sent to Twilio');
+              } else {
+                console.log('[ElevenLabs] Cannot send audio - streamSid:', streamSid, 'wsReady:', twilioWs.readyState === WebSocket.OPEN);
               }
               break;
 
@@ -159,6 +165,7 @@ function setupElevenLabsRoutes(app) {
             case 'start':
               streamSid = msg.start.streamSid;
               console.log('[Twilio] Stream started:', streamSid);
+              console.log('[Twilio] Stream config:', JSON.stringify(msg.start, null, 2));
               break;
 
             case 'media':
