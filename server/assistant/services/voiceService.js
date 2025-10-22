@@ -47,13 +47,37 @@ class VoiceService {
         responseStartTimestampTwilio: null,
         markQueue: [],
         mediaPacketCount: 0,
-        // Audio frame buffer for 20ms pacing (Fix #1)
+        // Audio frame buffer and queue for 20ms pacing
         audioBuffer: Buffer.alloc(0),
+        frameQueue: [],  // Queue of frames to send with proper pacing
+        isInterrupted: false,  // Flag to stop sending when user interrupts
         lastFrameTime: Date.now()
       };
 
       this.activeSessions.set(callSid, session);
       console.log(`[STREAM SID FIX] Session initialized with streamSid: ${streamSid}`);
+
+      // Start frame sender that sends one frame every 20ms for smooth, interruptible audio
+      session.frameSenderInterval = setInterval(() => {
+        // Skip if interrupted or no frames queued
+        if (session.isInterrupted || session.frameQueue.length === 0) {
+          return;
+        }
+
+        // Send one frame
+        const frame = session.frameQueue.shift();
+        if (frame && session.twilioWs.readyState === WebSocket.OPEN) {
+          try {
+            session.twilioWs.send(JSON.stringify({
+              event: 'media',
+              streamSid: session.streamSid,
+              media: { payload: frame.toString('base64') }
+            }));
+          } catch (error) {
+            console.error('[FRAME SENDER] Error sending frame:', error.message);
+          }
+        }
+      }, 20);  // Send one frame every 20ms
 
       // OpenAI WebSocket event handlers
       openAIWs.on('open', async () => {
@@ -109,6 +133,11 @@ class VoiceService {
 
       openAIWs.on('close', () => {
         console.log('OpenAI WebSocket closed');
+        // Clean up frame sender interval
+        if (session.frameSenderInterval) {
+          clearInterval(session.frameSenderInterval);
+          console.log('Frame sender interval cleared');
+        }
       });
 
       // Twilio WebSocket event handlers
@@ -123,6 +152,13 @@ class VoiceService {
 
       ws.on('close', async () => {
         console.log('Twilio stream closed');
+
+        // Clean up frame sender interval
+        if (session.frameSenderInterval) {
+          clearInterval(session.frameSenderInterval);
+          console.log('Frame sender interval cleared');
+        }
+
         openAIWs.close();
 
         // Save interaction
@@ -243,7 +279,7 @@ class VoiceService {
         break;
 
       case 'response.output_audio.delta':
-        // Stream audio back to Twilio with 20ms frame pacing (Fix #1 & #2)
+        // Stream audio back to Twilio with frame queue for interruptible playback
         console.log('[AUDIO DEBUG] Received audio delta, length:', event.delta ? event.delta.length : 'NO DELTA');
         console.log('[AUDIO DEBUG] Twilio WS state:', session.twilioWs ? session.twilioWs.readyState : 'NO WEBSOCKET');
         console.log('[AUDIO DEBUG] Stream SID:', session.streamSid || 'NO STREAM SID');
@@ -262,6 +298,7 @@ class VoiceService {
         if (event.item_id && event.item_id !== session.lastAssistantItem) {
           session.responseStartTimestampTwilio = session.latestMediaTimestamp;
           session.lastAssistantItem = event.item_id;
+          session.isInterrupted = false;  // Reset interrupt flag for new response
           console.log(`New response started at timestamp: ${session.responseStartTimestampTwilio}ms`);
 
           // Reset audio buffer for new response
@@ -276,41 +313,31 @@ class VoiceService {
           console.log(`Received audio chunk ${session.audioChunkCount}, delta length: ${event.delta.length}`);
         }
 
-        // Fix #2: Decode from Base64 directly (no redundant re-encoding)
+        // Decode from Base64 directly (no redundant re-encoding)
         const chunk = Buffer.from(event.delta, 'base64');
 
         // Append to buffer
         session.audioBuffer = Buffer.concat([session.audioBuffer, chunk]);
 
-        // Fix #1: Send 160-byte frames (20ms @ 8kHz μ-law for PSTN)
+        // Extract 160-byte frames (20ms @ 8kHz μ-law) and add to queue
         const FRAME_SIZE = 160; // 160 samples @ 8kHz = 20ms
-        let framesSent = 0;
+        let framesQueued = 0;
 
         while (session.audioBuffer.length >= FRAME_SIZE) {
           const frame = session.audioBuffer.subarray(0, FRAME_SIZE);
           session.audioBuffer = session.audioBuffer.subarray(FRAME_SIZE);
 
-          // Send frame to Twilio
-          try {
-            session.twilioWs.send(JSON.stringify({
-              event: 'media',
-              streamSid: session.streamSid,
-              media: {
-                payload: frame.toString('base64')
-              }
-            }));
-            framesSent++;
-          } catch (error) {
-            console.error('[AUDIO DEBUG] ❌ Error sending frame to Twilio:', error.message);
-          }
+          // Add frame to queue (interval will send at 20ms pace)
+          session.frameQueue.push(frame);
+          framesQueued++;
         }
 
-        if (framesSent > 0) {
-          console.log(`[AUDIO DEBUG] ✅ Sent ${framesSent} frames (${FRAME_SIZE} bytes each) to Twilio`);
+        if (framesQueued > 0) {
+          console.log(`[AUDIO DEBUG] ✅ Queued ${framesQueued} frames (queue size: ${session.frameQueue.length})`);
         }
 
-        // Send mark to track playback (only once per delta, not per frame)
-        if (session.streamSid && framesSent > 0) {
+        // Send mark to track playback (only once per delta)
+        if (session.streamSid && framesQueued > 0) {
           session.twilioWs.send(JSON.stringify({
             event: 'mark',
             streamSid: session.streamSid,
@@ -324,10 +351,18 @@ class VoiceService {
         // Handle interruption when user starts speaking
         console.log('Speech started detected - handling interruption');
 
+        // IMMEDIATE: Set interrupt flag to stop frame sender
+        session.isInterrupted = true;
+
+        // IMMEDIATE: Clear frame queue to prevent any more audio from sending
+        const clearedFrames = session.frameQueue.length;
+        session.frameQueue = [];
+        console.log(`[INTERRUPT] Cleared ${clearedFrames} queued frames`);
+
         // Only interrupt if audio has actually started playing
         if (session.markQueue.length > 0 && session.responseStartTimestampTwilio !== null) {
           const elapsedTime = session.latestMediaTimestamp - session.responseStartTimestampTwilio;
-          console.log(`Interrupting response at ${elapsedTime}ms`);
+          console.log(`[INTERRUPT] Interrupting response at ${elapsedTime}ms`);
 
           if (session.lastAssistantItem) {
             // Send truncate event to OpenAI with proper timing
@@ -345,6 +380,7 @@ class VoiceService {
               event: 'clear',
               streamSid: session.streamSid
             }));
+            console.log('[INTERRUPT] Sent clear event to Twilio');
           }
 
           // Reset tracking and clear local audio buffer
