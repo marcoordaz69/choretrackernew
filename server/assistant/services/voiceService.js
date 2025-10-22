@@ -77,7 +77,7 @@ class VoiceService {
                 format: {
                   type: 'audio/pcmu'
                 },
-                voice: 'ballad'  // Options: ash, ballad, coral, sage, verse
+                voice: process.env.VOICE_PREFERENCE || 'coral'  // Options: ash, ballad, coral, sage, verse
               }
             }
           }

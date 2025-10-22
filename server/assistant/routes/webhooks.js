@@ -24,8 +24,55 @@ router.post('/sms/incoming', async (req, res) => {
       return res.status(400).send('Missing required fields');
     }
 
+    // Handle compliance keywords (STOP, START, HELP)
+    const normalizedBody = Body.trim().toUpperCase();
+
+    if (['STOP', 'STOPALL', 'UNSUBSCRIBE', 'CANCEL', 'END', 'QUIT'].includes(normalizedBody)) {
+      // Handle opt-out
+      let user = await User.findByPhone(From);
+      if (user) {
+        user.smsOptedOut = true;
+        await user.save();
+      }
+      await twilioService.sendSMS(From, 'You have been unsubscribed and will no longer receive messages. Reply START to resubscribe.');
+      return res.status(200).send('OK');
+    }
+
+    if (['START', 'UNSTOP', 'SUBSCRIBE', 'YES'].includes(normalizedBody)) {
+      // Handle opt-in
+      let user = await User.findByPhone(From);
+      if (user) {
+        user.smsOptedOut = false;
+        await user.save();
+        await twilioService.sendSMS(From, `Welcome back! You've been resubscribed. Your assistant is ready to help. What's on your mind?`);
+      } else {
+        // New user - let them proceed with onboarding
+        await twilioService.sendSMS(From, `Welcome! Let's get you set up. What should I call you?`);
+      }
+      return res.status(200).send('OK');
+    }
+
+    if (['HELP', 'INFO', 'SUPPORT'].includes(normalizedBody)) {
+      // Handle help request
+      const helpMessage =
+        `I'm your personal life assistant! I help with:\n` +
+        `• Tasks & reminders\n` +
+        `• Habits & goals\n` +
+        `• Daily check-ins\n\n` +
+        `Reply STOP to unsubscribe\n` +
+        `Need support? Email: support@yourdomain.com`;
+      await twilioService.sendSMS(From, helpMessage);
+      return res.status(200).send('OK');
+    }
+
     // Find or create user
     let user = await User.findByPhone(From);
+
+    // Check if user is opted out
+    if (user && user.smsOptedOut) {
+      console.log(`User ${From} is opted out, ignoring message`);
+      return res.status(200).send('OK');
+    }
 
     if (!user) {
       // New user - start onboarding

@@ -58,7 +58,8 @@ class User {
         subscription: userData.subscription || undefined,
         ai_context: userData.aiContext || undefined,
         active: userData.active !== undefined ? userData.active : true,
-        onboarded: userData.onboarded || false
+        onboarded: userData.onboarded || false,
+        sms_opted_out: userData.smsOptedOut || false
       }])
       .select()
       .single();
@@ -81,6 +82,7 @@ class User {
       ai_context: this.ai_context,
       active: this.active,
       onboarded: this.onboarded,
+      sms_opted_out: this.smsOptedOut,
       last_active: new Date().toISOString()
     };
 
