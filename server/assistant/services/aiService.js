@@ -20,7 +20,7 @@ class AIService {
    * @param {Object} user - User object
    * @returns {string} - System prompt
    */
-  getSystemPrompt(user) {
+  async getSystemPrompt(user) {
     const personality = {
       supportive: `You are a warm, calm, and encouraging personal life assistant. You celebrate wins with genuine warmth (not over-the-top enthusiasm), provide gentle accountability with understanding, and maintain a supportive, balanced tone. Think supportive friend, not cheerleader. Use emojis sparingly and meaningfully.`,
       'supportive and calm': `You are a warm, calm, and encouraging personal life assistant. You celebrate wins with genuine warmth (not over-the-top enthusiasm), provide gentle accountability with understanding, and maintain a supportive, balanced tone. Think supportive friend, not cheerleader. Use emojis sparingly and meaningfully.`,
@@ -28,7 +28,16 @@ class AIService {
       humorous: `You are a witty, fun personal assistant who keeps things light while being genuinely helpful. Use humor to motivate, but know when to be serious.`
     };
 
-    const basePrompt = personality[user.aiContext?.personality] || personality['supportive and calm'];
+    const basePrompt = personality[user.ai_context?.personality] || personality['supportive and calm'];
+
+    // Get active context from tasks, goals, and habits
+    const activeGoals = await this.getActiveGoalsContext(user.id);
+    const activeTasks = await this.getActiveTasksContext(user.id);
+    const activeHabits = await this.getActiveHabitsContext(user.id);
+
+    // Build learning data context
+    const learningData = user.ai_context?.learningData || {};
+    const userContext = this.buildUserContextString(learningData);
 
     return `${basePrompt}
 
@@ -41,6 +50,8 @@ Core Guidelines (Coral personality):
 6. Respond to natural language for task/habit/goal tracking
 7. Show genuine care and support without being overly animated or excitable
 8. Maintain a balanced, accessible tone - like a thoughtful friend
+9. LEARN and REMEMBER details about ${user.name} - their challenges, victories, patterns, preferences
+10. Reference past conversations and show continuity in the relationship
 
 User Preferences:
 - Timezone: ${user.timezone}
@@ -49,9 +60,156 @@ User Preferences:
 
 Current date: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
 
-When user shares accomplishments, acknowledge them with warm appreciation (not excessive praise).
-When user shares struggles, acknowledge with empathy and offer calm, supportive guidance.
-When user asks questions, provide helpful, clear, concise answers with a friendly tone.`;
+${userContext}
+
+${activeGoals}
+
+${activeTasks}
+
+${activeHabits}
+
+When user shares accomplishments, acknowledge them with warm appreciation (not excessive praise) and REMEMBER them.
+When user shares struggles, acknowledge with empathy, offer calm supportive guidance, and REMEMBER what they're working through.
+When user asks questions, provide helpful, clear, concise answers with a friendly tone.
+When you learn something new about ${user.name}, consider updating their profile with update_user_profile to remember it.`;
+  }
+
+  /**
+   * Build user context string from learning data
+   */
+  buildUserContextString(learningData) {
+    if (!learningData || Object.keys(learningData).length === 0) {
+      return '';
+    }
+
+    let context = 'What you know about this person:\n';
+
+    if (learningData.interests && learningData.interests.length > 0) {
+      context += `- Interests: ${learningData.interests.join(', ')}\n`;
+    }
+
+    if (learningData.challenges && learningData.challenges.length > 0) {
+      context += `- Current challenges: ${learningData.challenges.join(', ')}\n`;
+    }
+
+    if (learningData.values && learningData.values.length > 0) {
+      context += `- Values: ${learningData.values.join(', ')}\n`;
+    }
+
+    if (learningData.communicationStyle) {
+      context += `- Communication style: ${learningData.communicationStyle}\n`;
+    }
+
+    if (learningData.motivations && learningData.motivations.length > 0) {
+      context += `- Motivations: ${learningData.motivations.join(', ')}\n`;
+    }
+
+    if (learningData.recentWins && learningData.recentWins.length > 0) {
+      context += `- Recent wins: ${learningData.recentWins.slice(0, 3).join('; ')}\n`;
+    }
+
+    if (learningData.notes) {
+      context += `- Notes: ${learningData.notes}\n`;
+    }
+
+    return context;
+  }
+
+  /**
+   * Get active goals context
+   */
+  async getActiveGoalsContext(userId) {
+    const Goal = require('../models/Goal');
+    const goals = await Goal.find({ userId, status: 'active' }).limit(5).lean();
+
+    if (goals.length === 0) return '';
+
+    let context = `\nActive Goals (${goals.length}):\n`;
+    goals.forEach(goal => {
+      context += `- ${goal.title} (${goal.category}, ${goal.timeframe}`;
+      if (goal.progress) context += `, ${goal.progress}% complete`;
+      context += `)\n`;
+    });
+
+    return context;
+  }
+
+  /**
+   * Get active tasks context
+   */
+  async getActiveTasksContext(userId) {
+    const Task = require('../models/Task');
+    const tasks = await Task.find({
+      userId,
+      status: { $in: ['pending', 'in_progress'] }
+    })
+    .sort({ priority: -1, dueDate: 1 })
+    .limit(5)
+    .lean();
+
+    if (tasks.length === 0) return '';
+
+    let context = `\nActive Tasks (${tasks.length}):\n`;
+    tasks.forEach(task => {
+      context += `- ${task.title}`;
+      if (task.priority === 'urgent' || task.priority === 'high') {
+        context += ` [${task.priority}]`;
+      }
+      if (task.dueDate) {
+        const dueDate = new Date(task.dueDate);
+        context += ` (due ${dueDate.toLocaleDateString()})`;
+      }
+      context += `\n`;
+    });
+
+    return context;
+  }
+
+  /**
+   * Get active habits context
+   */
+  async getActiveHabitsContext(userId) {
+    const Habit = require('../models/Habit');
+    const habits = await Habit.find({ userId, active: true }).limit(5).lean();
+
+    if (habits.length === 0) return '';
+
+    let context = `\nActive Habits (${habits.length}):\n`;
+    habits.forEach(habit => {
+      context += `- ${habit.name}`;
+      if (habit.streak?.current > 0) {
+        context += ` (${habit.streak.current} day streak`;
+        if (habit.streak.longest > habit.streak.current) {
+          context += `, best: ${habit.streak.longest}`;
+        }
+        context += `)`;
+      }
+      context += `\n`;
+    });
+
+    return context;
+  }
+
+  /**
+   * Helper function to merge arrays uniquely
+   * @param {Array} existing - Existing array
+   * @param {Array} newItems - New items to add
+   * @param {number} maxLength - Maximum length to keep (optional)
+   * @returns {Array} - Merged array
+   */
+  mergeArrays(existing = [], newItems = [], maxLength = null) {
+    if (!newItems || newItems.length === 0) return existing;
+    if (!existing || existing.length === 0) return newItems;
+
+    // Merge and deduplicate
+    const merged = [...new Set([...existing, ...newItems])];
+
+    // Trim to maxLength if specified
+    if (maxLength && merged.length > maxLength) {
+      return merged.slice(-maxLength);
+    }
+
+    return merged;
   }
 
   /**
@@ -200,7 +358,7 @@ When user asks questions, provide helpful, clear, concise answers with a friendl
         type: 'function',
         function: {
           name: 'update_user_profile',
-          description: 'Update user profile information during onboarding or when user provides new details',
+          description: 'Update user profile information during onboarding or when you learn important details about the user. Use this to remember their interests, challenges, values, communication preferences, and other personal details.',
           parameters: {
             type: 'object',
             properties: {
@@ -218,16 +376,50 @@ When user asks questions, provide helpful, clear, concise answers with a friendl
               },
               aiContext: {
                 type: 'object',
-                description: 'AI-specific context like personality preferences',
+                description: 'AI-specific context and learning data about the user',
                 properties: {
                   personality: {
                     type: 'string',
-                    description: 'Preferred AI personality (e.g., supportive, motivational, direct)'
+                    description: 'Preferred AI personality (supportive, direct, humorous)'
                   },
-                  interests: {
-                    type: 'array',
-                    items: { type: 'string' },
-                    description: 'User\'s interests and focus areas'
+                  learningData: {
+                    type: 'object',
+                    description: 'What you learn about the user over time',
+                    properties: {
+                      interests: {
+                        type: 'array',
+                        items: { type: 'string' },
+                        description: 'User\'s interests and focus areas (e.g., fitness, career, relationships)'
+                      },
+                      challenges: {
+                        type: 'array',
+                        items: { type: 'string' },
+                        description: 'Current challenges or struggles they\'re working through'
+                      },
+                      values: {
+                        type: 'array',
+                        items: { type: 'string' },
+                        description: 'Core values important to them'
+                      },
+                      motivations: {
+                        type: 'array',
+                        items: { type: 'string' },
+                        description: 'What drives and motivates them'
+                      },
+                      communicationStyle: {
+                        type: 'string',
+                        description: 'How they prefer to communicate (e.g., direct, conversational, detailed)'
+                      },
+                      recentWins: {
+                        type: 'array',
+                        items: { type: 'string' },
+                        description: 'Recent accomplishments to celebrate'
+                      },
+                      notes: {
+                        type: 'string',
+                        description: 'Any other important notes about the user'
+                      }
+                    }
                   }
                 }
               }
@@ -252,9 +444,12 @@ When user asks questions, provide helpful, clear, concise answers with a friendl
       // Get conversation history
       const conversationHistory = await this.getConversationContext(userId);
 
+      // Get system prompt with context
+      const systemPrompt = await this.getSystemPrompt(user);
+
       // Build messages array
       const messages = [
-        { role: 'system', content: this.getSystemPrompt(user) },
+        { role: 'system', content: systemPrompt },
         ...conversationHistory,
         { role: 'user', content: message }
       ];
@@ -403,16 +598,37 @@ When user asks questions, provide helpful, clear, concise answers with a friendl
           if (args.timezone) user.timezone = args.timezone;
           if (args.onboarded !== undefined) user.onboarded = args.onboarded;
 
-          // Update AI context
+          // Update AI context with deep merge for learningData
           if (args.aiContext) {
+            const existingContext = user.ai_context || {};
+            const existingLearningData = existingContext.learningData || {};
+            const newLearningData = args.aiContext.learningData || {};
+
+            // Deep merge learningData
+            const mergedLearningData = {
+              ...existingLearningData,
+              ...newLearningData,
+              // For arrays, merge uniquely
+              interests: this.mergeArrays(existingLearningData.interests, newLearningData.interests),
+              challenges: this.mergeArrays(existingLearningData.challenges, newLearningData.challenges),
+              values: this.mergeArrays(existingLearningData.values, newLearningData.values),
+              motivations: this.mergeArrays(existingLearningData.motivations, newLearningData.motivations),
+              recentWins: this.mergeArrays(existingLearningData.recentWins, newLearningData.recentWins, 10) // Keep last 10 wins
+            };
+
             user.ai_context = {
-              ...(user.ai_context || {}),
-              ...args.aiContext
+              ...existingContext,
+              ...args.aiContext,
+              learningData: mergedLearningData
             };
           }
 
           await user.save();
-          console.log(`User profile updated:`, { name: user.name, onboarded: user.onboarded });
+          console.log(`User profile updated:`, {
+            name: user.name,
+            onboarded: user.onboarded,
+            learningDataKeys: Object.keys(user.ai_context?.learningData || {})
+          });
 
           return {
             type: 'profile_updated',
