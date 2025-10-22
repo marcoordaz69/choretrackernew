@@ -46,7 +46,10 @@ class VoiceService {
         latestMediaTimestamp: 0,
         responseStartTimestampTwilio: null,
         markQueue: [],
-        mediaPacketCount: 0
+        mediaPacketCount: 0,
+        // Audio frame buffer for 20ms pacing (Fix #1)
+        audioBuffer: Buffer.alloc(0),
+        lastFrameTime: Date.now()
       };
 
       this.activeSessions.set(callSid, session);
@@ -240,7 +243,7 @@ class VoiceService {
         break;
 
       case 'response.output_audio.delta':
-        // Stream audio back to Twilio (GA format)
+        // Stream audio back to Twilio with 20ms frame pacing (Fix #1 & #2)
         console.log('[AUDIO DEBUG] Received audio delta, length:', event.delta ? event.delta.length : 'NO DELTA');
         console.log('[AUDIO DEBUG] Twilio WS state:', session.twilioWs ? session.twilioWs.readyState : 'NO WEBSOCKET');
         console.log('[AUDIO DEBUG] Stream SID:', session.streamSid || 'NO STREAM SID');
@@ -261,10 +264,8 @@ class VoiceService {
           session.lastAssistantItem = event.item_id;
           console.log(`New response started at timestamp: ${session.responseStartTimestampTwilio}ms`);
 
-          // Track audio chunk count for this response
-          if (!session.audioChunkCount) {
-            session.audioChunkCount = 0;
-          }
+          // Reset audio buffer for new response
+          session.audioBuffer = Buffer.alloc(0);
           session.audioChunkCount = 0;
         }
 
@@ -272,31 +273,44 @@ class VoiceService {
 
         // Log first few chunks
         if (session.audioChunkCount <= 3) {
-          console.log(`Sending audio chunk ${session.audioChunkCount} to Twilio, delta length: ${event.delta.length}`);
+          console.log(`Received audio chunk ${session.audioChunkCount}, delta length: ${event.delta.length}`);
         }
 
-        // Normalize base64 encoding (decode then re-encode)
-        // OpenAI sends base64, but we need to normalize it for Twilio
-        const audioPayload = Buffer.from(event.delta, 'base64').toString('base64');
+        // Fix #2: Decode from Base64 directly (no redundant re-encoding)
+        const chunk = Buffer.from(event.delta, 'base64');
 
-        console.log('[AUDIO DEBUG] Sending audio to Twilio, payload length:', audioPayload.length);
+        // Append to buffer
+        session.audioBuffer = Buffer.concat([session.audioBuffer, chunk]);
 
-        // Send audio to Twilio
-        try {
-          session.twilioWs.send(JSON.stringify({
-            event: 'media',
-            streamSid: session.streamSid,
-            media: {
-              payload: audioPayload
-            }
-          }));
-          console.log('[AUDIO DEBUG] ✅ Audio sent successfully to Twilio');
-        } catch (error) {
-          console.error('[AUDIO DEBUG] ❌ Error sending audio to Twilio:', error.message);
+        // Fix #1: Send 160-byte frames (20ms @ 8kHz μ-law for PSTN)
+        const FRAME_SIZE = 160; // 160 samples @ 8kHz = 20ms
+        let framesSent = 0;
+
+        while (session.audioBuffer.length >= FRAME_SIZE) {
+          const frame = session.audioBuffer.subarray(0, FRAME_SIZE);
+          session.audioBuffer = session.audioBuffer.subarray(FRAME_SIZE);
+
+          // Send frame to Twilio
+          try {
+            session.twilioWs.send(JSON.stringify({
+              event: 'media',
+              streamSid: session.streamSid,
+              media: {
+                payload: frame.toString('base64')
+              }
+            }));
+            framesSent++;
+          } catch (error) {
+            console.error('[AUDIO DEBUG] ❌ Error sending frame to Twilio:', error.message);
+          }
         }
 
-        // Send mark to track playback
-        if (session.streamSid) {
+        if (framesSent > 0) {
+          console.log(`[AUDIO DEBUG] ✅ Sent ${framesSent} frames (${FRAME_SIZE} bytes each) to Twilio`);
+        }
+
+        // Send mark to track playback (only once per delta, not per frame)
+        if (session.streamSid && framesSent > 0) {
           session.twilioWs.send(JSON.stringify({
             event: 'mark',
             streamSid: session.streamSid,
@@ -333,10 +347,11 @@ class VoiceService {
             }));
           }
 
-          // Reset tracking
+          // Reset tracking and clear local audio buffer
           session.markQueue = [];
           session.lastAssistantItem = null;
           session.responseStartTimestampTwilio = null;
+          session.audioBuffer = Buffer.alloc(0); // Clear buffered frames
         }
         break;
 

@@ -78,10 +78,13 @@ class TwilioService {
     }
 
     const connect = response.connect();
-    connect.stream({
+    const stream = connect.stream({
       url: websocketUrl,
       name: 'audio-stream'
     });
+
+    // Fix #3: Add jitter buffer to smooth packet arrival
+    stream.parameter({ name: 'jitterBufferSize', value: 'medium' });
 
     return response.toString();
   }
@@ -104,6 +107,9 @@ class TwilioService {
       url: websocketUrl,
       name: 'openai-realtime-stream'
     });
+
+    // Fix #3: Add jitter buffer to smooth packet arrival and reduce choppiness
+    stream.parameter({ name: 'jitterBufferSize', value: 'medium' });
 
     // Pass parameters through TwiML (not query string)
     if (userId) {
