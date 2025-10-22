@@ -77,7 +77,7 @@ class VoiceService {
                 format: {
                   type: 'audio/pcmu'
                 },
-                voice: 'alloy'
+                voice: 'coral'  // Options: ash, ballad, coral, sage, verse
               }
             }
           }
