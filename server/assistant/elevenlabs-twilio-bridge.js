@@ -55,16 +55,22 @@ function setupElevenLabsRoutes(app) {
     console.log('[ElevenLabs] Request host:', req.headers.host);
 
     const response = new VoiceResponse();
-    const connect = response.connect();
+
+    // Use <Start> instead of <Connect> to keep call alive while streaming
+    const start = response.start();
 
     // Stream audio to our WebSocket endpoint (bidirectional)
     const streamUrl = `wss://${req.headers.host}/elevenlabs/media-stream`;
     console.log('[ElevenLabs] Stream URL:', streamUrl);
 
-    connect.stream({
+    start.stream({
       url: streamUrl,
       track: 'both_tracks'  // Enable both inbound AND outbound audio
     });
+
+    // Add a long pause to keep the call alive while streaming
+    // The stream will handle the actual conversation
+    response.pause({ length: 3600 }); // 1 hour pause (max call duration)
 
     const twiml = response.toString();
     console.log('[ElevenLabs] TwiML response:', twiml);
