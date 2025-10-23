@@ -161,7 +161,14 @@ function setupElevenLabsRoutes(app) {
         try {
           const msg = JSON.parse(message);
 
+          // Log ALL events from Twilio to debug
+          console.log('[Twilio] Received event:', msg.event);
+
           switch (msg.event) {
+            case 'connected':
+              console.log('[Twilio] Connected event received');
+              break;
+
             case 'start':
               streamSid = msg.start.streamSid;
               console.log('[Twilio] Stream started:', streamSid);
@@ -183,6 +190,9 @@ function setupElevenLabsRoutes(app) {
                 elevenLabsWs.close();
               }
               break;
+
+            default:
+              console.log('[Twilio] Unhandled event:', msg.event, JSON.stringify(msg).substring(0, 200));
           }
         } catch (error) {
           console.error('[Twilio] Error processing message:', error);
