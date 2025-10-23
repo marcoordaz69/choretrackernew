@@ -200,6 +200,12 @@ function setupElevenLabsRoutes(app) {
               break;
 
             case 'media':
+              // Get streamSid from media message (when using <Start> TwiML)
+              if (!streamSid && msg.streamSid) {
+                streamSid = msg.streamSid;
+                console.log('[Twilio] Got streamSid from media event:', streamSid);
+              }
+
               // Forward audio to ElevenLabs (only if connected)
               if (elevenLabsWs && elevenLabsWs.readyState === WebSocket.OPEN) {
                 elevenLabsWs.send(JSON.stringify({
