@@ -181,8 +181,8 @@ function setupElevenLabsRoutes(app) {
             break;
 
             case 'media':
-              // Forward audio to ElevenLabs
-              if (elevenLabsWs.readyState === WebSocket.OPEN) {
+              // Forward audio to ElevenLabs (only if connected)
+              if (elevenLabsWs && elevenLabsWs.readyState === WebSocket.OPEN) {
                 elevenLabsWs.send(JSON.stringify({
                   user_audio_chunk: Buffer.from(msg.media.payload, 'base64').toString('base64')
                 }));
