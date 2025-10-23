@@ -52,18 +52,25 @@ function setupElevenLabsRoutes(app) {
   console.log('[ElevenLabs Bridge] Setting up POST /elevenlabs/call/incoming');
   app.post('/elevenlabs/call/incoming', (req, res) => {
     console.log('[ElevenLabs] Incoming call from:', req.body.From);
+    console.log('[ElevenLabs] Request host:', req.headers.host);
 
     const response = new VoiceResponse();
     const connect = response.connect();
 
     // Stream audio to our WebSocket endpoint (bidirectional)
+    const streamUrl = `wss://${req.headers.host}/elevenlabs/media-stream`;
+    console.log('[ElevenLabs] Stream URL:', streamUrl);
+
     connect.stream({
-      url: `wss://${req.headers.host}/elevenlabs/media-stream`,
+      url: streamUrl,
       track: 'both_tracks'  // Enable both inbound AND outbound audio
     });
 
+    const twiml = response.toString();
+    console.log('[ElevenLabs] TwiML response:', twiml);
+
     res.type('text/xml');
-    res.send(response.toString());
+    res.send(twiml);
   });
 
   /**
@@ -72,7 +79,9 @@ function setupElevenLabsRoutes(app) {
    */
   console.log('[ElevenLabs Bridge] Setting up WS /elevenlabs/media-stream');
   app.ws('/elevenlabs/media-stream', async (twilioWs, req) => {
-    console.log('[ElevenLabs] WebSocket connection established');
+    console.log('[ElevenLabs] ===== WebSocket connection established =====');
+    console.log('[ElevenLabs] Client IP:', req.connection.remoteAddress);
+    console.log('[ElevenLabs] Request headers:', req.headers);
 
     let elevenLabsWs;
     let streamSid = null;
