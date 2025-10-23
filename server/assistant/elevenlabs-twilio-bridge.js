@@ -56,9 +56,10 @@ function setupElevenLabsRoutes(app) {
     const response = new VoiceResponse();
     const connect = response.connect();
 
-    // Stream audio to our WebSocket endpoint
+    // Stream audio to our WebSocket endpoint (bidirectional)
     connect.stream({
-      url: `wss://${req.headers.host}/elevenlabs/media-stream`
+      url: `wss://${req.headers.host}/elevenlabs/media-stream`,
+      track: 'both_tracks'  // Enable both inbound AND outbound audio
     });
 
     res.type('text/xml');
@@ -156,13 +157,21 @@ function setupElevenLabsRoutes(app) {
         console.log('[ElevenLabs] Disconnected from ElevenLabs');
       });
 
+      // Track if this is the first message to debug streamSid issue
+      let messageCount = 0;
+
       // Twilio → ElevenLabs: Forward user audio
       twilioWs.on('message', (message) => {
         try {
           const msg = JSON.parse(message);
+          messageCount++;
 
-          // Log ALL events from Twilio to debug
-          console.log('[Twilio] Received event:', msg.event);
+          // Log first 5 messages in FULL to debug streamSid issue
+          if (messageCount <= 5) {
+            console.log(`[Twilio] Message #${messageCount} FULL:`, JSON.stringify(msg, null, 2));
+          } else {
+            console.log('[Twilio] Received event:', msg.event);
+          }
 
           switch (msg.event) {
             case 'connected':
