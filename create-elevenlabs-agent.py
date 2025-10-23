@@ -69,6 +69,7 @@ Listen carefully to what the user says and respond naturally. Be supportive and 
             "tts": {
                 "voice_id": voice_id,
                 "model_id": "eleven_turbo_v2",  # Fast, high-quality
+                "output_format": "ulaw_8000",  # μ-law 8kHz for Twilio compatibility
                 "optimize_streaming_latency": 3,  # Lower latency
                 "stability": 0.5,
                 "similarity_boost": 0.75
