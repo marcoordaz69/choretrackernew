@@ -21,6 +21,10 @@ const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
 async function getElevenLabsSignedUrl(agentId) {
   const url = `https://api.elevenlabs.io/v1/convai/conversation/get_signed_url?agent_id=${agentId}`;
 
+  console.log('[ElevenLabs] Requesting signed URL from:', url);
+  console.log('[ElevenLabs] API Key present:', !!ELEVENLABS_API_KEY);
+  console.log('[ElevenLabs] API Key length:', ELEVENLABS_API_KEY?.length || 0);
+
   const response = await fetch(url, {
     method: 'GET',
     headers: {
@@ -28,11 +32,17 @@ async function getElevenLabsSignedUrl(agentId) {
     }
   });
 
+  console.log('[ElevenLabs] Signed URL response status:', response.status);
+
   if (!response.ok) {
-    throw new Error(`Failed to get signed URL: ${response.statusText}`);
+    const errorText = await response.text();
+    console.error('[ElevenLabs] Failed to get signed URL:', response.status, response.statusText);
+    console.error('[ElevenLabs] Error response body:', errorText);
+    throw new Error(`Failed to get signed URL: ${response.statusText} - ${errorText}`);
   }
 
   const data = await response.json();
+  console.log('[ElevenLabs] Signed URL response:', { ...data, signed_url: data.signed_url?.substring(0, 40) + '...' });
   return data.signed_url;
 }
 
@@ -94,11 +104,23 @@ function setupElevenLabsRoutes(app) {
 
     try {
       // Get signed URL and connect to ElevenLabs IMMEDIATELY
+      console.log('[ElevenLabs] Fetching signed URL for agent:', ELEVENLABS_AGENT_ID);
       const signedUrl = await getElevenLabsSignedUrl(ELEVENLABS_AGENT_ID);
       console.log('[ElevenLabs] Got signed URL, connecting to ElevenLabs...');
+      console.log('[ElevenLabs] SignedUrl starts with:', signedUrl.substring(0, 40) + '...');
 
       // Connect to ElevenLabs right away
       elevenLabsWs = new WebSocket(signedUrl);
+      console.log('[ElevenLabs] WebSocket object created, waiting for connection...');
+
+      // Set a timeout to detect if connection never opens
+      const connectionTimeout = setTimeout(() => {
+        if (elevenLabsWs.readyState !== WebSocket.OPEN) {
+          console.error('[ElevenLabs] ⚠️ CONNECTION TIMEOUT - WebSocket never opened!');
+          console.error('[ElevenLabs] WebSocket readyState:', elevenLabsWs.readyState);
+          console.error('[ElevenLabs] 0=CONNECTING, 1=OPEN, 2=CLOSING, 3=CLOSED');
+        }
+      }, 10000); // 10 second timeout
 
       // ElevenLabs → Twilio: Forward audio responses
       elevenLabsWs.on('message', (data) => {
@@ -161,15 +183,23 @@ function setupElevenLabsRoutes(app) {
       });
 
       elevenLabsWs.on('open', () => {
-        console.log('[ElevenLabs] Connected to ElevenLabs');
+        clearTimeout(connectionTimeout);
+        console.log('[ElevenLabs] ✅ Connected to ElevenLabs successfully!');
+        console.log('[ElevenLabs] WebSocket readyState:', elevenLabsWs.readyState);
       });
 
       elevenLabsWs.on('error', (error) => {
-        console.error('[ElevenLabs] WebSocket error:', error);
+        console.error('[ElevenLabs] ❌ WebSocket ERROR:', error);
+        console.error('[ElevenLabs] Error type:', error.type);
+        console.error('[ElevenLabs] Error message:', error.message);
+        console.error('[ElevenLabs] Full error object:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
       });
 
-      elevenLabsWs.on('close', () => {
+      elevenLabsWs.on('close', (code, reason) => {
+        clearTimeout(connectionTimeout);
         console.log('[ElevenLabs] Disconnected from ElevenLabs');
+        console.log('[ElevenLabs] Close code:', code);
+        console.log('[ElevenLabs] Close reason:', reason.toString());
       });
 
       // Track if this is the first message to debug streamSid issue
