@@ -2,9 +2,9 @@
   "name": "my-chore-tracker",
   "version": "1.0.0",
   "description": "A MERN stack application for tracking family chores",
-  "main": "server/server.js",
+  "main": "server/assistant-server.js",
   "scripts": {
-    "start": "node server/server.js",
+    "start": "node server/assistant-server.js",
     "server": "nodemon server/server.js",
     "client": "npm start --prefix client",
     "dev": "concurrently \"npm run server\" \"npm run client\"",
