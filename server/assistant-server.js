@@ -56,6 +56,17 @@ const server = http.createServer(app);
 const { initializeAssistant, shutdownAssistant } = require('./assistant');
 initializeAssistant(app, server);
 
+// Add WebSocket upgrade error logging
+server.on('upgrade', (request, socket, head) => {
+  console.log('[WebSocket] Upgrade request received');
+  console.log('[WebSocket] URL:', request.url);
+  console.log('[WebSocket] Headers:', request.headers);
+});
+
+server.on('error', (error) => {
+  console.error('[Server] Error:', error);
+});
+
 // Start server
 // Railway provides PORT env var, fallback to ASSISTANT_PORT for local dev
 const PORT = process.env.PORT || process.env.ASSISTANT_PORT || 5001;

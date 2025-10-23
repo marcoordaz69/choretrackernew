@@ -237,9 +237,41 @@ function setupElevenLabsRoutes(app) {
     }
   });
 
+  // Test endpoint to verify WebSocket is working
+  app.get('/elevenlabs/ws-test', (req, res) => {
+    res.send(`
+      <html>
+        <body>
+          <h1>WebSocket Test</h1>
+          <div id="status">Connecting...</div>
+          <script>
+            const ws = new WebSocket('wss://${req.headers.host}/elevenlabs/media-stream');
+            const status = document.getElementById('status');
+
+            ws.onopen = () => {
+              status.textContent = 'Connected! WebSocket is working.';
+              status.style.color = 'green';
+            };
+
+            ws.onerror = (error) => {
+              status.textContent = 'Error: ' + error;
+              status.style.color = 'red';
+            };
+
+            ws.onclose = () => {
+              status.textContent = 'Closed';
+              status.style.color = 'orange';
+            };
+          </script>
+        </body>
+      </html>
+    `);
+  });
+
   console.log('[ElevenLabs] Routes configured:');
   console.log('  - POST /elevenlabs/call/incoming (Twilio webhook)');
   console.log('  - WS /elevenlabs/media-stream (Audio bridge)');
+  console.log('  - GET /elevenlabs/ws-test (WebSocket test page)');
 }
 
 module.exports = {
