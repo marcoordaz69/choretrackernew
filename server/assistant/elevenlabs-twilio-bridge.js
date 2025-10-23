@@ -75,21 +75,13 @@ function setupElevenLabsRoutes(app) {
 
     let elevenLabsWs;
     let streamSid = null;
-    let signedUrl = null;
 
-    // Get signed URL but don't connect yet - wait for Twilio's "start" event
     try {
-      signedUrl = await getElevenLabsSignedUrl(ELEVENLABS_AGENT_ID);
-      console.log('[ElevenLabs] Got signed URL, waiting for Twilio stream start...');
-    } catch (error) {
-      console.error('[ElevenLabs] Setup error:', error);
-      twilioWs.close();
-      return;
-    }
+      // Get signed URL and connect to ElevenLabs IMMEDIATELY
+      const signedUrl = await getElevenLabsSignedUrl(ELEVENLABS_AGENT_ID);
+      console.log('[ElevenLabs] Got signed URL, connecting to ElevenLabs...');
 
-    // Setup ElevenLabs connection helper
-    const connectToElevenLabs = () => {
-      console.log('[ElevenLabs] Connecting to ElevenLabs...');
+      // Connect to ElevenLabs right away
       elevenLabsWs = new WebSocket(signedUrl);
 
       // ElevenLabs → Twilio: Forward audio responses
@@ -163,22 +155,18 @@ function setupElevenLabsRoutes(app) {
       elevenLabsWs.on('close', () => {
         console.log('[ElevenLabs] Disconnected from ElevenLabs');
       });
-    };
 
-    // Twilio → ElevenLabs: Forward user audio
-    twilioWs.on('message', (message) => {
-      try {
-        const msg = JSON.parse(message);
+      // Twilio → ElevenLabs: Forward user audio
+      twilioWs.on('message', (message) => {
+        try {
+          const msg = JSON.parse(message);
 
-        switch (msg.event) {
-          case 'start':
-            streamSid = msg.start.streamSid;
-            console.log('[Twilio] Stream started:', streamSid);
-            console.log('[Twilio] Stream config:', JSON.stringify(msg.start, null, 2));
-
-            // NOW connect to ElevenLabs after we have streamSid
-            connectToElevenLabs();
-            break;
+          switch (msg.event) {
+            case 'start':
+              streamSid = msg.start.streamSid;
+              console.log('[Twilio] Stream started:', streamSid);
+              console.log('[Twilio] Stream config:', JSON.stringify(msg.start, null, 2));
+              break;
 
             case 'media':
               // Forward audio to ElevenLabs (only if connected)
@@ -211,6 +199,14 @@ function setupElevenLabsRoutes(app) {
       twilioWs.on('error', (error) => {
         console.error('[Twilio] WebSocket error:', error);
       });
+
+    } catch (error) {
+      console.error('[ElevenLabs] Error initializing conversation:', error);
+      if (elevenLabsWs) {
+        elevenLabsWs.close();
+      }
+      twilioWs.close();
+    }
   });
 
   console.log('[ElevenLabs] Routes configured:');
