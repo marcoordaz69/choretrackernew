@@ -98,10 +98,7 @@ class TwilioService {
   generateAIVoiceTwiML(websocketUrl, greeting = "Hey! I'm here. What's on your mind?", userId = null, callSid = null) {
     const response = new VoiceResponse();
 
-    response.say({
-      voice: 'Polly.Joanna'
-    }, greeting);
-
+    // No pre-recorded greeting - let AI speak directly
     const connect = response.connect();
     const stream = connect.stream({
       url: websocketUrl,
