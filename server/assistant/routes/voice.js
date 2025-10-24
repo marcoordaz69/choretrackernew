@@ -82,18 +82,22 @@ module.exports = function(app) {
   /**
    * POST /custom-scolding
    * TwiML for custom scolding call with override instructions
+   * Query params: userId, mode (e.g., "scolding:laundry", "scolding:gym")
    */
   router.post('/custom-scolding', (req, res) => {
-    const { userId } = req.query;
+    const { userId, mode } = req.query;
 
     const websocketUrl = `wss://${req.get('host')}/assistant/voice/stream`;
 
+    // Use provided mode or default to generic scolding
+    const customMode = mode || 'scolding';
+
     const twiml = twilioService.generateAIVoiceTwiML(
       websocketUrl,
-      "Marco! We need to talk.",
+      "We need to talk.",
       userId,
       req.body.CallSid,
-      'scolding'
+      customMode
     );
 
     res.type('text/xml').send(twiml);
