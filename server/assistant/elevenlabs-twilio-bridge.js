@@ -219,9 +219,8 @@ function setupElevenLabsRoutes(app) {
           // Log first 5 messages in FULL to debug streamSid issue
           if (messageCount <= 5) {
             console.log(`[Twilio] Message #${messageCount} FULL:`, JSON.stringify(msg, null, 2));
-          } else {
-            console.log('[Twilio] Received event:', msg.event);
           }
+          // Skip logging regular media events to reduce noise
 
           switch (msg.event) {
             case 'connected':
