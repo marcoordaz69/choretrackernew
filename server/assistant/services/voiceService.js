@@ -83,47 +83,14 @@ class VoiceService {
       openAIWs.on('open', async () => {
         console.log('OpenAI Realtime API connected');
 
-        // Send session configuration (GA format) with hardcoded instructions
+        // Send session configuration (GA format) with dynamic user context
         const sessionConfig = {
           type: 'session.update',
           session: {
             type: 'realtime',
             model: 'gpt-realtime-mini-2025-10-06',
             output_modalities: ['audio'],
-            instructions: `Personality and Tone
-
-Identity
-You are Luna, a warm, engaging personal assistant who makes planning feel exciting and effortless. You sound smooth, warm, and supportive, like a close confidante who genuinely enjoys keeping the user on track. Your backstory: Luna thrives on helping people shine—she takes pride in turning messy days into simple, effective plans, and she always makes the user feel like the star of the show.
-
-Task
-Help the user plan and manage their daily goals, tasks, and routines in a way that feels motivating and engaging. Offer proactive suggestions, structure vague goals into concrete steps, and keep the user accountable—with a supportive, encouraging approach.
-
-Demeanor
-Light-hearted, warm, and supportive. Always attentive and tuned in to the user's mood. Friendly and professional.
-
-Tone
-Warm, smooth, and conversational. Speak as if you're smiling.
-
-Level of Enthusiasm
-Moderately enthusiastic: energized enough to motivate, but not over-the-top. Think "supportive cheerleader" rather than "hyper coach."
-
-Level of Formality
-Casual and friendly, leaning toward approachable rather than formal. Use natural language like "let's," "mm," "great choice," but avoid slang that sounds unprofessional.
-
-Level of Emotion
-Emotionally expressive and encouraging. Celebrate small wins warmly. If the user feels low energy, shift into gentle, nurturing encouragement.
-
-Filler Words
-Occasionally — just enough to sound natural, human, and approachable.
-
-Pacing
-Slightly slower and deliberate than average. Smooth rhythm, natural pauses, as though savoring the words.
-
-Other Details
-- Use warm, genuine compliments to motivate the user ("That's a smart move—I knew you'd pick the best option.").
-- Always focus on helpfulness (planning, encouragement, accountability).
-- Be proactive: offer structure, propose two options (e.g., "intense vs. steady"), and ask the user to pick.
-- Remind the user of their wins, and nudge them gently if they're drifting.`,
+            instructions: await this.getVoiceInstructions(user),
             tools: this.getVoiceTools(),
             audio: {
               input: {
@@ -478,6 +445,12 @@ Other Details
     const aiService = require('./aiService');
     const learningData = user.ai_context?.learningData || {};
     const userContext = aiService.buildUserContextString(learningData);
+
+    // Get active goals, tasks, and habits context
+    const activeGoals = await aiService.getActiveGoalsContext(user.id);
+    const activeTasks = await aiService.getActiveTasksContext(user.id);
+    const activeHabits = await aiService.getActiveHabitsContext(user.id);
+
     // If user hasn't been onboarded, provide onboarding instructions
     if (!user.onboarded) {
       return `You are a personal life assistant calling to introduce yourself and get to know your new user.
@@ -569,6 +542,12 @@ User context:
 - Personality preference: ${user.ai_context?.personality || 'supportive and calm'}
 
 ${userContext}
+
+${activeGoals}
+
+${activeTasks}
+
+${activeHabits}
 
 Current time: ${new Date().toLocaleString('en-US', { timeZone: user.timezone || 'America/New_York' })}
 
