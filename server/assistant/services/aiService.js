@@ -120,12 +120,12 @@ When you learn something new about ${user.name}, consider updating their profile
    */
   async getActiveGoalsContext(userId) {
     const Goal = require('../models/Goal');
-    const goals = await Goal.find({ userId, status: 'active' }).limit(5).lean();
+    const goals = await Goal.findActive(userId);
 
     if (goals.length === 0) return '';
 
-    let context = `\nActive Goals (${goals.length}):\n`;
-    goals.forEach(goal => {
+    let context = `\nActive Goals (${goals.length > 5 ? 5 : goals.length}):\n`;
+    goals.slice(0, 5).forEach(goal => {
       context += `- ${goal.title} (${goal.category}, ${goal.timeframe}`;
       if (goal.progress) context += `, ${goal.progress}% complete`;
       context += `)\n`;
@@ -139,24 +139,18 @@ When you learn something new about ${user.name}, consider updating their profile
    */
   async getActiveTasksContext(userId) {
     const Task = require('../models/Task');
-    const tasks = await Task.find({
-      userId,
-      status: { $in: ['pending', 'in_progress'] }
-    })
-    .sort({ priority: -1, dueDate: 1 })
-    .limit(5)
-    .lean();
+    const tasks = await Task.findPending(userId);
 
     if (tasks.length === 0) return '';
 
-    let context = `\nActive Tasks (${tasks.length}):\n`;
-    tasks.forEach(task => {
+    let context = `\nActive Tasks (${tasks.length > 5 ? 5 : tasks.length}):\n`;
+    tasks.slice(0, 5).forEach(task => {
       context += `- ${task.title}`;
       if (task.priority === 'urgent' || task.priority === 'high') {
         context += ` [${task.priority}]`;
       }
-      if (task.dueDate) {
-        const dueDate = new Date(task.dueDate);
+      if (task.due_date) {
+        const dueDate = new Date(task.due_date);
         context += ` (due ${dueDate.toLocaleDateString()})`;
       }
       context += `\n`;
@@ -170,17 +164,17 @@ When you learn something new about ${user.name}, consider updating their profile
    */
   async getActiveHabitsContext(userId) {
     const Habit = require('../models/Habit');
-    const habits = await Habit.find({ userId, active: true }).limit(5).lean();
+    const habits = await Habit.findByUserId(userId, true); // true = activeOnly
 
     if (habits.length === 0) return '';
 
-    let context = `\nActive Habits (${habits.length}):\n`;
-    habits.forEach(habit => {
+    let context = `\nActive Habits (${habits.length > 5 ? 5 : habits.length}):\n`;
+    habits.slice(0, 5).forEach(habit => {
       context += `- ${habit.name}`;
-      if (habit.streak?.current > 0) {
-        context += ` (${habit.streak.current} day streak`;
-        if (habit.streak.longest > habit.streak.current) {
-          context += `, best: ${habit.streak.longest}`;
+      if (habit.current_streak > 0) {
+        context += ` (${habit.current_streak} day streak`;
+        if (habit.longest_streak > habit.current_streak) {
+          context += `, best: ${habit.longest_streak}`;
         }
         context += `)`;
       }
