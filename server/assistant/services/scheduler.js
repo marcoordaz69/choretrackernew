@@ -25,6 +25,12 @@ class Scheduler {
     });
     this.jobs.push(eveningJob);
 
+    // Motivational wake-up calls - runs every minute to check for scheduled calls
+    const motivationalJob = cron.schedule('* * * * *', async () => {
+      await this.processMotivationalWakeupCalls();
+    });
+    this.jobs.push(motivationalJob);
+
     // Proactive nudges - runs every 30 minutes
     const nudgeJob = cron.schedule('*/30 * * * *', async () => {
       await this.processProactiveNudges();
@@ -114,6 +120,62 @@ class Scheduler {
       }
     } catch (error) {
       console.error('Error processing evening check-ins:', error);
+    }
+  }
+
+  /**
+   * Process motivational wake-up calls
+   */
+  async processMotivationalWakeupCalls() {
+    try {
+      const voiceService = require('./voiceService');
+      const now = new Date();
+      const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+      const currentDay = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][now.getDay()];
+      const todayDate = now.toISOString().split('T')[0]; // YYYY-MM-DD
+
+      const allUsers = await User.findAll();
+      const users = allUsers.filter(user =>
+        user.active &&
+        user.onboarded &&
+        user.preferences?.motivationalWakeupEnabled &&
+        user.preferences?.motivationalWakeupTime === currentTime
+      );
+
+      for (const user of users) {
+        const days = user.preferences?.motivationalWakeupDays || [];
+        let shouldCall = false;
+
+        // Check if today is in the regular schedule
+        if (days.includes(currentDay)) {
+          shouldCall = true;
+        }
+
+        // Check for bi-weekly Saturday
+        if (currentDay === 'saturday' && user.preferences?.motivationalWakeupBiweeklySaturday) {
+          const nextSaturday = user.preferences?.motivationalWakeupNextSaturday;
+          if (nextSaturday === todayDate) {
+            shouldCall = true;
+
+            // Update next Saturday to 2 weeks from now
+            const twoWeeksLater = new Date(now);
+            twoWeeksLater.setDate(twoWeeksLater.getDate() + 14);
+            user.preferences.motivationalWakeupNextSaturday = twoWeeksLater.toISOString().split('T')[0];
+            await user.save();
+          }
+        }
+
+        if (shouldCall) {
+          console.log(`Initiating motivational wake-up call for ${user.name} (${user.phone})`);
+
+          const webhookUrl = `https://${process.env.DOMAIN}/assistant/voice/motivational-wakeup?userId=${user.id}`;
+          await twilioService.makeCall(user.phone, webhookUrl);
+
+          console.log(`Motivational wake-up call initiated for ${user.name}`);
+        }
+      }
+    } catch (error) {
+      console.error('Error processing motivational wake-up calls:', error);
     }
   }
 

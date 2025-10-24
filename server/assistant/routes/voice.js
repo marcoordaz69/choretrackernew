@@ -103,5 +103,25 @@ module.exports = function(app) {
     res.type('text/xml').send(twiml);
   });
 
+  /**
+   * POST /motivational-wakeup
+   * TwiML for motivational morning wake-up calls
+   */
+  router.post('/motivational-wakeup', (req, res) => {
+    const { userId } = req.query;
+
+    const websocketUrl = `wss://${req.get('host')}/assistant/voice/stream`;
+
+    const twiml = twilioService.generateAIVoiceTwiML(
+      websocketUrl,
+      "Good morning! Rise and shine!",
+      userId,
+      req.body.CallSid,
+      'motivational-wakeup'
+    );
+
+    res.type('text/xml').send(twiml);
+  });
+
   return router;
 };
