@@ -112,15 +112,20 @@ function setupElevenLabsRoutes(app) {
       // Connect to ElevenLabs right away
       elevenLabsWs = new WebSocket(signedUrl);
       console.log('[ElevenLabs] WebSocket object created, waiting for connection...');
+      console.log('[ElevenLabs] Initial readyState:', elevenLabsWs.readyState, '(0=CONNECTING)');
 
       // Set a timeout to detect if connection never opens
       const connectionTimeout = setTimeout(() => {
+        console.error('[ElevenLabs] ⚠️ CONNECTION TIMEOUT - 10 seconds elapsed');
+        console.error('[ElevenLabs] WebSocket readyState:', elevenLabsWs.readyState);
+        console.error('[ElevenLabs] 0=CONNECTING, 1=OPEN, 2=CLOSING, 3=CLOSED');
         if (elevenLabsWs.readyState !== WebSocket.OPEN) {
-          console.error('[ElevenLabs] ⚠️ CONNECTION TIMEOUT - WebSocket never opened!');
-          console.error('[ElevenLabs] WebSocket readyState:', elevenLabsWs.readyState);
-          console.error('[ElevenLabs] 0=CONNECTING, 1=OPEN, 2=CLOSING, 3=CLOSED');
+          console.error('[ElevenLabs] Connection failed - closing WebSocket');
+          elevenLabsWs.close();
         }
       }, 10000); // 10 second timeout
+
+      console.log('[ElevenLabs] Timeout set for 10 seconds');
 
       // ElevenLabs → Twilio: Forward audio responses
       elevenLabsWs.on('message', (data) => {
