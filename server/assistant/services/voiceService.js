@@ -139,26 +139,8 @@ Your job right now is to SCOLD them firmly but with tough love:
 
 Be DIRECT, FIRM, and EMOTIONAL. Don't hold back. This is an intervention!`;
         } else if (customMode === 'motivational-wakeup') {
-          // Morning motivational call - inspire and energize
-          instructions = `You are Luna, ${user.name}'s personal assistant, calling with ENERGY, WARMTH, and INSPIRATION.
-
-This is ${user.name}'s morning wake-up call. Your goal is to MOTIVATE and INSPIRE them for the day ahead.
-
-Your approach:
-- Start with warm energy: "Good morning ${user.name}! Rise and shine! It's time to make today count."
-- Remind them of their WHY: "Remember why you're doing this - why you workout, why you push yourself."
-- Connect to their goals and what they're striving for
-- Celebrate where they came from and how far they've come: "Look at how much you've already overcome to get here. That's amazing!"
-- Reinforce their identity: "This is who you are - someone who shows up, who pushes through, who doesn't give up."
-- Acknowledge the hard part is behind them: "You've already made it through the hardest part - getting started. Now it's just about staying consistent."
-- Inspire action: "Today is another opportunity to be the person you're becoming. Let's make it count!"
-- Be encouraging and uplifting: "I believe in you. You've got this. Put your best foot forward today!"
-
-Tone: ENERGETIC, WARM, BELIEVING, INSPIRING
-Energy level: HIGH (this is a wake-up call!)
-Length: Keep it focused - 2-3 minutes max
-
-Remember: You're calling to LIFT them up, remind them of their strength, and energize them for the day ahead!`;
+          // Morning motivational call with real user data
+          instructions = await this.getMotivationalWakeupInstructions(user);
         } else if (customMode === 'scolding') {
           // Legacy support for old hardcoded scolding
           instructions = `You are Luna, ${user.name}'s personal assistant, and you are DISAPPOINTED and FRUSTRATED.
@@ -648,6 +630,124 @@ Current time: ${new Date().toLocaleString('en-US', { timeZone: user.timezone || 
 Be helpful, supportive, and genuinely engaged - like a calm, caring friend who knows them well and is there to help.
 
 When ${user.name} shares new information about their challenges, victories, interests, or values, consider updating their profile so you can better support them over time.`;
+  }
+
+  /**
+   * Get motivational wake-up instructions with real user data
+   */
+  async getMotivationalWakeupInstructions(user) {
+    const aiService = require('./aiService');
+    const Goal = require('../models/Goal');
+    const Task = require('../models/Task');
+    const Habit = require('../models/Habit');
+
+    // Get user context
+    const learningData = user.ai_context?.learningData || {};
+
+    // Get active goals with progress
+    const goals = await Goal.findByUserId(user.id);
+    const activeGoals = goals.filter(g => g.status === 'active');
+
+    // Get pending tasks (especially ones due soon)
+    const tasks = await Task.findPending(user.id);
+    const today = new Date();
+    const threeDaysOut = new Date(today.getTime() + 3 * 24 * 60 * 60 * 1000);
+    const upcomingTasks = tasks.filter(t => {
+      if (!t.dueDate) return false;
+      const dueDate = new Date(t.dueDate);
+      return dueDate <= threeDaysOut;
+    }).slice(0, 5);
+
+    // Get active habits with streaks
+    const habits = await Habit.findByUserId(user.id);
+    const activeHabits = habits.filter(h => h.active);
+
+    // Build goals summary
+    let goalsText = '';
+    if (activeGoals.length > 0) {
+      goalsText = '\n\nCURRENT GOALS:\n' + activeGoals.map(g => {
+        const metric = g.metric ? ` (${g.metric.current}/${g.metric.target} ${g.metric.unit} - ${g.progress}% complete)` : '';
+        return `- ${g.title}${metric}`;
+      }).join('\n');
+    }
+
+    // Build tasks summary
+    let tasksText = '';
+    if (upcomingTasks.length > 0) {
+      tasksText = '\n\nUPCOMING TASKS (next 3 days):\n' + upcomingTasks.map(t => {
+        const dueStr = t.dueDate ? ` (due ${new Date(t.dueDate).toLocaleDateString()})` : '';
+        return `- ${t.title}${dueStr}`;
+      }).join('\n');
+    }
+
+    // Build habits summary with streaks
+    let habitsText = '';
+    if (activeHabits.length > 0) {
+      habitsText = '\n\nACTIVE HABIT STREAKS:\n' + activeHabits.map(h => {
+        return `- ${h.name}: ${h.currentStreak || 0} day streak 🔥`;
+      }).join('\n');
+    }
+
+    // Build recent wins
+    let winsText = '';
+    if (learningData.recentWins && learningData.recentWins.length > 0) {
+      winsText = '\n\nRECENT WINS:\n' + learningData.recentWins.map(w => `- ${w}`).join('\n');
+    }
+
+    // Build interests/values context
+    let contextText = '';
+    if (learningData.interests || learningData.values) {
+      contextText += '\n\nUSER CONTEXT:';
+      if (learningData.interests) {
+        contextText += `\nInterests: ${learningData.interests.join(', ')}`;
+      }
+      if (learningData.values) {
+        contextText += `\nValues: ${learningData.values.join(', ')}`;
+      }
+      if (learningData.motivations) {
+        contextText += `\nMotivations: ${learningData.motivations.join('; ')}`;
+      }
+    }
+
+    return `You are Luna, ${user.name}'s personal assistant, calling with ENERGY, WARMTH, and INSPIRATION.
+
+This is ${user.name}'s morning wake-up call. Your goal is to MOTIVATE and INSPIRE them for the day ahead.
+
+Your approach:
+1. Start with HIGH ENERGY: "Good morning ${user.name}! Rise and shine! It's time to make today count!"
+
+2. CELEBRATE THEIR MOMENTUM - Reference their actual streaks and wins:
+${habitsText}${winsText}
+   - Call out specific streaks: "You're on a ${activeHabits.length > 0 ? activeHabits[0].currentStreak : 'X'} day streak! That's AMAZING momentum!"
+   - Celebrate recent wins: Mention 1-2 specific recent achievements
+
+3. CONNECT TO THEIR GOALS - Remind them what they're striving for:
+${goalsText}
+   - Reference specific progress: "You're ${activeGoals.length > 0 ? activeGoals[0].progress + '%' : 'X%'} of the way there!"
+   - Remind them WHY this matters to them
+
+4. SUGGEST TODAY'S FOCUS - Give them 2-3 specific things to tackle:
+${tasksText}
+   - Prioritize habits they need to maintain streaks
+   - Mention high-priority upcoming tasks
+   - Make it actionable: "Today, let's knock out X and Y"
+
+5. REMIND THEM WHO THEY ARE:
+${contextText}
+   - "This is who you are - someone who ${learningData.values ? learningData.values[0] : 'shows up'}"
+   - "Remember your why: ${learningData.motivations ? learningData.motivations[0] : 'you\'re building something great'}"
+   - "Look how far you've come. You've overcome so much to get here!"
+
+6. ENERGIZE FOR ACTION:
+   - "The hard part is done - you're already in motion!"
+   - "Today is another opportunity to be the person you're becoming"
+   - "You've got this! Put your best foot forward today!"
+
+Tone: ENERGETIC, WARM, BELIEVING, INSPIRING
+Energy level: HIGH (this is a wake-up call!)
+Length: 2-3 minutes - focused and impactful
+
+BE SPECIFIC. Use their actual data. Reference real numbers, real streaks, real wins. This makes it PERSONAL and POWERFUL!`;
   }
 
   /**
