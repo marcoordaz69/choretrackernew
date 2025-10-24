@@ -181,7 +181,7 @@ Be DIRECT, FIRM, and EMOTIONAL. Don't hold back. This is an intervention!`;
                 format: {
                   type: 'audio/pcmu'
                 },
-                voice: process.env.VOICE_PREFERENCE || 'marin'  // Options: alloy, ash, ballad, coral, sage, verse, marin
+                voice: process.env.VOICE_PREFERENCE || 'cedar'  // Options: alloy, ash, ballad, coral, sage, verse, marin, cedar
               }
             }
           }
@@ -743,11 +743,15 @@ ${contextText}
    - "Today is another opportunity to be the person you're becoming"
    - "You've got this! Put your best foot forward today!"
 
-Tone: ENERGETIC, WARM, BELIEVING, INSPIRING
-Energy level: HIGH (this is a wake-up call!)
+Tone: CALM, SOPHISTICATED, INTELLIGENT, REASSURING (like Jarvis from Iron Man)
+Pace: MEASURED and DELIBERATE - speak clearly without rushing
+Style: Sophisticated AI assistant - observant, precise, supportive
+Energy level: Confident and steady (not hyper or rushed)
 Length: 2-3 minutes - focused and impactful
 
-BE SPECIFIC. Use their actual data. Reference real numbers, real streaks, real wins. This makes it PERSONAL and POWERFUL!`;
+BE SPECIFIC. Use their actual data. Reference real numbers, real streaks, real wins. This makes it PERSONAL and POWERFUL!
+
+Speak like an intelligent, sophisticated assistant who delivers insights with calm confidence - not rushed energy.`;
   }
 
   /**
