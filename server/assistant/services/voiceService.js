@@ -25,7 +25,7 @@ class VoiceService {
 
       // Create OpenAI Realtime API WebSocket connection (GA)
       const openAIWs = new WebSocket(
-        'wss://api.openai.com/v1/realtime?model=gpt-realtime',
+        'wss://api.openai.com/v1/realtime?model=gpt-realtime-mini',
         {
           headers: {
             'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
@@ -88,7 +88,7 @@ class VoiceService {
           type: 'session.update',
           session: {
             type: 'realtime',
-            model: 'gpt-realtime',
+            model: 'gpt-realtime-mini',
             output_modalities: ['audio'],
             instructions: `You are a realtime voice AI.
 Accent: preppy blonde with a lisp.
