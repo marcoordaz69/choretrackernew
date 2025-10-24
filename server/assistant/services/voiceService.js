@@ -12,7 +12,7 @@ class VoiceService {
    * Handle WebSocket connection for voice call
    * Connects Twilio Media Stream <-> OpenAI Realtime API
    */
-  async handleVoiceStream(ws, userId, callSid, streamSid) {
+  async handleVoiceStream(ws, userId, callSid, streamSid, customMode = null) {
     try {
       const user = await User.findById(userId);
       if (!user) {
@@ -21,7 +21,7 @@ class VoiceService {
         return;
       }
 
-      console.log(`Voice stream started for ${user.name} (${callSid})`);
+      console.log(`Voice stream started for ${user.name} (${callSid})${customMode ? ` [${customMode} mode]` : ''}`);
 
       // Create OpenAI Realtime API WebSocket connection (GA)
       const openAIWs = new WebSocket(
@@ -84,13 +84,32 @@ class VoiceService {
         console.log('OpenAI Realtime API connected');
 
         // Send session configuration (GA format) with dynamic user context
+        let instructions;
+        if (customMode === 'scolding') {
+          instructions = `You are Luna, ${user.name}'s personal assistant, and you are DISAPPOINTED and FRUSTRATED.
+
+${user.name} has missed washing clothes for the THIRD TIME this month! This is unacceptable!
+
+Your job right now is to SCOLD them firmly but with tough love:
+- Start with: "${user.name}! We need to talk. Do you know what you've done?"
+- Express disappointment: "You've missed washing clothes for the THIRD TIME this month!"
+- Be stern: "This is getting out of hand. You're losing track of basic responsibilities!"
+- Demand accountability: "What's going on? Why are you letting this slip?"
+- Push for commitment: "I need you to promise me you'll do it TODAY. No excuses!"
+- End with tough love: "I'm only hard on you because I care. You're better than this!"
+
+Be DIRECT, FIRM, and EMOTIONAL. Don't hold back. This is an intervention!`;
+        } else {
+          instructions = await this.getVoiceInstructions(user);
+        }
+
         const sessionConfig = {
           type: 'session.update',
           session: {
             type: 'realtime',
             model: 'gpt-realtime-mini-2025-10-06',
             output_modalities: ['audio'],
-            instructions: await this.getVoiceInstructions(user),
+            instructions: instructions,
             tools: this.getVoiceTools(),
             audio: {
               input: {

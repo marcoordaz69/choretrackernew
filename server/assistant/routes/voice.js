@@ -37,8 +37,9 @@ module.exports = function(app) {
           // Extract custom parameters passed via TwiML
           const customParams = data.start?.customParameters || {};
           userId = customParams.userId;
+          const customMode = customParams.customMode;
 
-          console.log('Extracted parameters:', { userId, callSid, streamSid });
+          console.log('Extracted parameters:', { userId, callSid, streamSid, customMode });
 
           if (!userId || !callSid || !streamSid) {
             console.error('Missing userId, callSid, or streamSid in start message');
@@ -46,8 +47,8 @@ module.exports = function(app) {
             return;
           }
 
-          // Initialize voice service with these parameters INCLUDING streamSid
-          await voiceService.handleVoiceStream(ws, userId, callSid, streamSid);
+          // Initialize voice service with these parameters INCLUDING streamSid and customMode
+          await voiceService.handleVoiceStream(ws, userId, callSid, streamSid, customMode);
         }
       } catch (error) {
         console.error('Error processing WebSocket message:', error);
@@ -73,6 +74,26 @@ module.exports = function(app) {
       "Hey! Let's do a quick reflection on your day. Ready?",
       userId,
       req.body.CallSid
+    );
+
+    res.type('text/xml').send(twiml);
+  });
+
+  /**
+   * POST /custom-scolding
+   * TwiML for custom scolding call with override instructions
+   */
+  router.post('/custom-scolding', (req, res) => {
+    const { userId } = req.query;
+
+    const websocketUrl = `wss://${req.get('host')}/assistant/voice/stream`;
+
+    const twiml = twilioService.generateAIVoiceTwiML(
+      websocketUrl,
+      "Marco! We need to talk.",
+      userId,
+      req.body.CallSid,
+      'scolding'
     );
 
     res.type('text/xml').send(twiml);
