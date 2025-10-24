@@ -70,7 +70,9 @@ module.exports = function(app) {
 
     const twiml = twilioService.generateAIVoiceTwiML(
       websocketUrl,
-      "Hey! Let's do a quick reflection on your day. Ready?"
+      "Hey! Let's do a quick reflection on your day. Ready?",
+      userId,
+      req.body.CallSid
     );
 
     res.type('text/xml').send(twiml);
