@@ -83,17 +83,14 @@ class VoiceService {
       openAIWs.on('open', async () => {
         console.log('OpenAI Realtime API connected');
 
-        // Get voice instructions with user context
-        const instructions = await this.getVoiceInstructions(user);
-
-        // Send session configuration (GA format)
+        // Send session configuration (GA format) using stored prompt
         const sessionConfig = {
           type: 'session.update',
           session: {
             type: 'realtime',
             model: 'gpt-realtime',
             output_modalities: ['audio'],
-            instructions: instructions,
+            prompt: 'pmpt_68fb3d6a17408190901a2dfc0b9fe66d05fea4ffa0117837',
             tools: this.getVoiceTools(),
             audio: {
               input: {
@@ -108,12 +105,13 @@ class VoiceService {
                 format: {
                   type: 'audio/pcmu'
                 },
-                voice: process.env.VOICE_PREFERENCE || 'alloy'  // Options: alloy, ash, ballad, coral, sage, verse
+                voice: process.env.VOICE_PREFERENCE || 'sage'  // Options: alloy, ash, ballad, coral, sage, verse
               }
             }
           }
         };
 
+        console.log(`[SESSION CONFIG] Using prompt ID: pmpt_68fb3d6a17408190901a2dfc0b9fe66d05fea4ffa0117837`);
         console.log(`[SESSION CONFIG] Sending ${sessionConfig.session.tools.length} function tools to OpenAI`);
         openAIWs.send(JSON.stringify(sessionConfig));
       });
