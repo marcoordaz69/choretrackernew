@@ -123,5 +123,25 @@ module.exports = function(app) {
     res.type('text/xml').send(twiml);
   });
 
+  /**
+   * POST /task-reminder
+   * TwiML for task reminder calls
+   */
+  router.post('/task-reminder', (req, res) => {
+    const { userId, taskId } = req.query;
+
+    const websocketUrl = `wss://${req.get('host')}/assistant/voice/stream`;
+
+    const twiml = twilioService.generateAIVoiceTwiML(
+      websocketUrl,
+      "Hey! I'm calling to remind you about a task.",
+      userId,
+      req.body.CallSid,
+      `task-reminder:${taskId}`
+    );
+
+    res.type('text/xml').send(twiml);
+  });
+
   return router;
 };

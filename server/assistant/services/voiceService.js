@@ -141,6 +141,46 @@ Be DIRECT, FIRM, and EMOTIONAL. Don't hold back. This is an intervention!`;
         } else if (customMode === 'motivational-wakeup') {
           // Morning motivational call with real user data
           instructions = await this.getMotivationalWakeupInstructions(user);
+        } else if (customMode && customMode.startsWith('task-reminder:')) {
+          // Task reminder call
+          const taskId = customMode.replace('task-reminder:', '');
+          const Task = require('../models/Task');
+          const task = await Task.findById(taskId);
+
+          if (!task) {
+            instructions = `You are Luna, ${user.name}'s personal assistant. I tried to remind you about a task, but I can't find it in my system. Let me know if you need help with anything else.`;
+          } else {
+            const dueTime = task.dueDate ? new Date(task.dueDate).toLocaleTimeString('en-US', {
+              hour: 'numeric',
+              minute: '2-digit',
+              timeZone: user.timezone || 'America/New_York'
+            }) : 'soon';
+
+            instructions = `You are Luna, ${user.name}'s personal assistant, calling to remind them about an upcoming task.
+
+TASK DETAILS:
+- Task: ${task.title}
+- Priority: ${task.priority}
+- Due: ${dueTime}
+${task.notes ? `- Notes: ${task.notes}` : ''}
+
+Your approach:
+1. Greet them warmly: "Hey ${user.name}! Quick reminder about something important."
+
+2. Tell them about the task: "You have '${task.title}' coming up - it's due at ${dueTime}."
+
+3. ${task.notes ? `Mention the details: "${task.notes}"` : ''}
+
+4. Check in: "Are you all set? Need any help with this?"
+
+5. Offer to adjust: "If you need to reschedule or want me to remind you again later, just let me know."
+
+Tone: HELPFUL, FRIENDLY, BRIEF
+Style: Quick reminder call - get in, deliver info, offer help, get out
+Keep it: 30-60 seconds unless they want to discuss
+
+This is a reminder, not a lecture. Be supportive and efficient.`;
+          }
         } else if (customMode === 'scolding') {
           // Legacy support for old hardcoded scolding
           instructions = `You are Luna, ${user.name}'s personal assistant, and you are DISAPPOINTED and FRUSTRATED.
