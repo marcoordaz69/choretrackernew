@@ -36,6 +36,7 @@ class Scheduler {
       await this.processTaskReminderCalls();
     });
     this.jobs.push(taskReminderJob);
+    console.log('✅ Task reminder scheduler initialized - will check for due tasks every minute');
 
     // Proactive nudges - runs every 30 minutes
     const nudgeJob = cron.schedule('*/30 * * * *', async () => {
@@ -280,15 +281,23 @@ class Scheduler {
   async processTaskReminderCalls() {
     const Task = require('../models/Task');
     const now = new Date();
+    const currentTime = now.toISOString();
+
+    console.log(`🔍 Checking for task reminders at ${currentTime}`);
 
     try {
       // Get all active users
       const allUsers = await User.findAll();
       const activeUsers = allUsers.filter(user => user.active && user.onboarded);
 
+      console.log(`   Found ${activeUsers.length} active users to check`);
+
       for (const user of activeUsers) {
         // Find pending tasks for this user
         const allTasks = await Task.findPending(user.id);
+        const tasksWithDates = allTasks.filter(t => t.due_date);
+
+        console.log(`   ${user.name}: ${allTasks.length} pending tasks, ${tasksWithDates.length} with due dates`);
 
         // Filter tasks that are due within the current minute
         const dueNowTasks = allTasks.filter(t => {
@@ -299,7 +308,13 @@ class Scheduler {
           const nextMinute = new Date(currentMinute.getTime() + 60 * 1000);
 
           // Task is due if its due time is in the current minute
-          return dueDate >= currentMinute && dueDate < nextMinute;
+          const isDue = dueDate >= currentMinute && dueDate < nextMinute;
+
+          if (tasksWithDates.length > 0 && tasksWithDates.length <= 3) {
+            console.log(`      Task: "${t.title}" - Due: ${dueDate.toISOString()} - Current: ${currentMinute.toISOString()} - Is Due: ${isDue}`);
+          }
+
+          return isDue;
         });
 
         // Trigger voice call for each due task
