@@ -420,6 +420,23 @@ When you learn something new about ${user.name}, consider updating their profile
             }
           }
         }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'complete_task',
+          description: 'Mark a task as completed when the user confirms they have finished it',
+          parameters: {
+            type: 'object',
+            properties: {
+              taskId: {
+                type: 'string',
+                description: 'The ID of the task to mark as complete'
+              }
+            },
+            required: ['taskId']
+          }
+        }
       }
     ];
   }
@@ -628,6 +645,32 @@ When you learn something new about ${user.name}, consider updating their profile
           console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
           return { type: 'task_created', data: task };
+
+        case 'complete_task':
+          const taskToComplete = await Task.findById(args.taskId);
+
+          if (!taskToComplete) {
+            console.log(`❌ Task not found: ${args.taskId}`);
+            return { type: 'error', message: 'Task not found' };
+          }
+
+          await taskToComplete.complete();
+
+          console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+          console.log('✅ TASK COMPLETED VIA VOICE');
+          console.log(`   Task ID: ${taskToComplete.id}`);
+          console.log(`   Title: ${taskToComplete.title}`);
+          console.log(`   Completed at: ${taskToComplete.completed_at}`);
+          console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+          return {
+            type: 'task_completed',
+            data: {
+              id: taskToComplete.id,
+              title: taskToComplete.title,
+              completedAt: taskToComplete.completed_at
+            }
+          };
 
         case 'log_habit':
           const habit = await Habit.findOne({

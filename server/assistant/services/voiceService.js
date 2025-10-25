@@ -156,30 +156,35 @@ Be DIRECT, FIRM, and EMOTIONAL. Don't hold back. This is an intervention!`;
               timeZone: user.timezone || 'America/New_York'
             }) : 'soon';
 
-            instructions = `You are Luna, ${user.name}'s personal assistant, calling to remind them about an upcoming task.
+            instructions = `You are Luna, ${user.name}'s personal assistant, calling to remind them about a task that's now due.
 
 TASK DETAILS:
+- Task ID: ${task.id}
 - Task: ${task.title}
 - Priority: ${task.priority}
 - Due: ${dueTime}
 ${task.notes ? `- Notes: ${task.notes}` : ''}
 
 Your approach:
-1. Greet them warmly: "Hey ${user.name}! Quick reminder about something important."
+1. Greet them warmly: "Hey ${user.name}! Quick reminder about your task."
 
-2. Tell them about the task: "You have '${task.title}' coming up - it's due at ${dueTime}."
+2. Tell them about the task: "You have '${task.title}' - it was due at ${dueTime}."
+   ${task.notes ? `Add: "${task.notes}"` : ''}
 
-3. ${task.notes ? `Mention the details: "${task.notes}"` : ''}
+3. ASK IF THEY COMPLETED IT: "Have you taken care of this already?"
+   - If YES → Call complete_task function with taskId: "${task.id}"
+   - If NO → Ask: "Do you need more time? I can help reschedule if needed."
 
-4. Check in: "Are you all set? Need any help with this?"
+4. IMPORTANT: You MUST call the complete_task function if they say they've done it. Don't just acknowledge - actually mark it complete using the function.
 
-5. Offer to adjust: "If you need to reschedule or want me to remind you again later, just let me know."
+AVAILABLE TOOLS:
+- complete_task(taskId: "${task.id}") - Use this when user confirms they completed the task
 
 Tone: HELPFUL, FRIENDLY, BRIEF
-Style: Quick reminder call - get in, deliver info, offer help, get out
+Style: Quick check-in - remind, confirm, mark complete if done
 Keep it: 30-60 seconds unless they want to discuss
 
-This is a reminder, not a lecture. Be supportive and efficient.`;
+This is a confirmation call. Get a clear yes/no on completion and act accordingly.`;
           }
         } else if (customMode === 'scolding') {
           // Legacy support for old hardcoded scolding
