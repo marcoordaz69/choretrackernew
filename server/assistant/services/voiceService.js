@@ -257,7 +257,7 @@ Delivery: Speak clearly with refined pronunciation, slight British accent in cad
                 format: {
                   type: 'audio/pcmu'
                 },
-                voice: process.env.VOICE_PREFERENCE || 'marin'  // Options: alloy, ash, ballad, coral, echo, sage, shimmer, verse, marin, cedar
+                voice: (process.env.VOICE_PREFERENCE || 'marin').toLowerCase()  // Options: alloy, ash, ballad, coral, echo, sage, shimmer, verse, marin, cedar
               }
             }
           }
