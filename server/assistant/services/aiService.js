@@ -255,7 +255,7 @@ When you learn something new about ${user.name}, consider updating their profile
               },
               dueDate: {
                 type: 'string',
-                description: 'Due date/time in ISO 8601 format (e.g., "2025-01-24T19:30:00Z"). CRITICAL: If user says "in 5 minutes", "in 1 hour", "at 7pm", etc., calculate the actual timestamp from the current time and convert to ISO format. This determines when the reminder call will be triggered. If no time specified, leave null.'
+                description: 'Due date/time in ISO 8601 UTC format. CRITICAL TIMEZONE HANDLING: The current time shown in your instructions is in the user\'s LOCAL timezone. When calculating due dates: 1) Add the offset to current LOCAL time (e.g., "in 5 minutes" = current local time + 5 minutes), 2) The result must be converted to UTC by adding the timezone offset hours (e.g., PST is UTC-7, so add 7 hours), 3) Format as ISO 8601 with Z suffix (e.g., "2025-10-25T03:30:00Z"). Example: If current time is "10/24/2025, 8:00 PM" (PST) and user says "in 5 minutes", calculate 8:05 PM PST, then convert to UTC by adding 7 hours = 3:05 AM UTC next day = "2025-10-25T03:05:00Z". If no time specified, leave null.'
               }
             },
             required: ['title']
