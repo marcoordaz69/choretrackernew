@@ -236,7 +236,7 @@ When you learn something new about ${user.name}, consider updating their profile
         type: 'function',
         function: {
           name: 'create_task',
-          description: 'Create a new task or to-do item',
+          description: 'Create a new task or to-do item with an optional due date/time for reminders',
           parameters: {
             type: 'object',
             properties: {
@@ -255,7 +255,7 @@ When you learn something new about ${user.name}, consider updating their profile
               },
               dueDate: {
                 type: 'string',
-                description: 'Due date in ISO format (optional)'
+                description: 'Due date/time in ISO 8601 format (e.g., "2025-01-24T19:30:00Z"). CRITICAL: If user says "in 5 minutes", "in 1 hour", "at 7pm", etc., calculate the actual timestamp from the current time and convert to ISO format. This determines when the reminder call will be triggered. If no time specified, leave null.'
               }
             },
             required: ['title']
