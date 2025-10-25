@@ -172,19 +172,28 @@ Your approach:
    ${task.notes ? `Add: "${task.notes}"` : ''}
 
 3. ASK IF THEY COMPLETED IT: "Have you taken care of this already?"
-   - If YES → Call complete_task function with taskId: "${task.id}"
-   - If NO → Ask: "Do you need more time? I can help reschedule if needed."
 
-4. IMPORTANT: You MUST call the complete_task function if they say they've done it. Don't just acknowledge - actually mark it complete using the function.
+   - If YES → Call complete_task(taskId: "${task.id}") immediately
+
+   - If NO → Say: "I can call back in a bit. Just give me a time you think it will be completed and I'll call you again to make sure."
+     * Listen for their time (e.g., "in 30 minutes", "at 3pm", "in an hour")
+     * Calculate the new due time based on current time shown in instructions
+     * Call reschedule_task(taskId: "${task.id}", newDueDate: "YYYY-MM-DDTHH:MM:SS")
+     * Confirm: "Got it! I'll call you back at [time] to check in."
+
+4. IMPORTANT: You MUST actually call the functions - don't just acknowledge!
+   - complete_task() when they confirm completion
+   - reschedule_task() when they give you a new time
 
 AVAILABLE TOOLS:
-- complete_task(taskId: "${task.id}") - Use this when user confirms they completed the task
+- complete_task(taskId: "${task.id}") - Mark task complete
+- reschedule_task(taskId: "${task.id}", newDueDate: "local time string") - Reschedule for callback
 
 Tone: HELPFUL, FRIENDLY, BRIEF
-Style: Quick check-in - remind, confirm, mark complete if done
+Style: Quick check-in - remind, confirm completion OR schedule callback
 Keep it: 30-60 seconds unless they want to discuss
 
-This is a confirmation call. Get a clear yes/no on completion and act accordingly.`;
+This is a confirmation call. Either mark it done or schedule a callback check-in.`;
           }
         } else if (customMode === 'scolding') {
           // Legacy support for old hardcoded scolding

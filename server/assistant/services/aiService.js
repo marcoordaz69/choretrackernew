@@ -437,6 +437,27 @@ When you learn something new about ${user.name}, consider updating their profile
             required: ['taskId']
           }
         }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'reschedule_task',
+          description: 'Reschedule a task to a new due date/time when user needs more time',
+          parameters: {
+            type: 'object',
+            properties: {
+              taskId: {
+                type: 'string',
+                description: 'The ID of the task to reschedule'
+              },
+              newDueDate: {
+                type: 'string',
+                description: 'New due date/time in user\'s local timezone (same format as create_task). Example: "2025-10-24T20:05:00" for 8:05 PM local time.'
+              }
+            },
+            required: ['taskId', 'newDueDate']
+          }
+        }
       }
     ];
   }
@@ -669,6 +690,86 @@ When you learn something new about ${user.name}, consider updating their profile
               id: taskToComplete.id,
               title: taskToComplete.title,
               completedAt: taskToComplete.completed_at
+            }
+          };
+
+        case 'reschedule_task':
+          const taskToReschedule = await Task.findById(args.taskId);
+
+          if (!taskToReschedule) {
+            console.log(`❌ Task not found for rescheduling: ${args.taskId}`);
+            return { type: 'error', message: 'Task not found' };
+          }
+
+          // Parse the new due date using the same timezone logic as create_task
+          let newParsedDueDate = null;
+          if (args.newDueDate) {
+            try {
+              const user = await User.findById(userId);
+              const userTimezone = user.timezone || 'America/New_York';
+
+              if (args.newDueDate.includes('Z') || args.newDueDate.includes('+') || (args.newDueDate.match(/-/g) || []).length > 2) {
+                newParsedDueDate = new Date(args.newDueDate);
+              } else {
+                const localTimeStr = args.newDueDate;
+                const [datePart, timePart] = localTimeStr.split('T');
+                const [year, month, day] = datePart.split('-').map(Number);
+                const [hour, minute, second = 0] = (timePart || '00:00:00').split(':').map(Number);
+
+                const utcDate = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+                const formatted = new Intl.DateTimeFormat('en-US', {
+                  timeZone: userTimezone,
+                  year: 'numeric',
+                  month: '2-digit',
+                  day: '2-digit',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  second: '2-digit',
+                  hour12: false
+                }).format(utcDate);
+
+                const [fDate, fTime] = formatted.split(', ');
+                const [fMonth, fDay, fYear] = fDate.split('/').map(Number);
+                const [fHour, fMinute, fSecond] = fTime.split(':').map(Number);
+                const formattedDate = new Date(fYear, fMonth - 1, fDay, fHour, fMinute, fSecond);
+
+                const offsetMs = utcDate.getTime() - formattedDate.getTime();
+                const targetUtc = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+                newParsedDueDate = new Date(targetUtc.getTime() + offsetMs);
+              }
+
+              const now = new Date();
+              const hoursDiff = (newParsedDueDate.getTime() - now.getTime()) / (1000 * 60 * 60);
+
+              if (hoursDiff < -1) {
+                console.log(`⚠️  WARNING: Rescheduled date is in the past. Setting to null.`);
+                newParsedDueDate = null;
+              }
+            } catch (error) {
+              console.log(`❌ Error parsing new due date: ${args.newDueDate}`, error.message);
+              newParsedDueDate = null;
+            }
+          }
+
+          // Update the task's due date
+          taskToReschedule.due_date = newParsedDueDate;
+          await taskToReschedule.save();
+
+          console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+          console.log('📅 TASK RESCHEDULED VIA VOICE');
+          console.log(`   Task ID: ${taskToReschedule.id}`);
+          console.log(`   Title: ${taskToReschedule.title}`);
+          console.log(`   New due date: ${taskToReschedule.due_date}`);
+          const minutesUntil = Math.floor((new Date(taskToReschedule.due_date).getTime() - new Date().getTime()) / 1000 / 60);
+          console.log(`   ⏰ Due in: ${minutesUntil} minutes`);
+          console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+          return {
+            type: 'task_rescheduled',
+            data: {
+              id: taskToReschedule.id,
+              title: taskToReschedule.title,
+              newDueDate: taskToReschedule.due_date
             }
           };
 
