@@ -331,6 +331,10 @@ class Scheduler {
           await twilioService.makeCall(user.phone, webhookUrl);
 
           console.log(`✅ Task reminder call initiated for ${user.name}: ${task.title}`);
+
+          // Mark task as complete after reminder call is sent
+          await task.complete();
+          console.log(`   ✓ Task marked as complete - will not be checked again`);
         }
       }
     } catch (error) {
