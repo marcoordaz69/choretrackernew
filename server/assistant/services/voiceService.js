@@ -150,7 +150,7 @@ Be DIRECT, FIRM, and EMOTIONAL. Don't hold back. This is an intervention!`;
           if (!task) {
             instructions = `You are Luna, ${user.name}'s personal assistant. I tried to remind you about a task, but I can't find it in my system. Let me know if you need help with anything else.`;
           } else {
-            const dueTime = task.dueDate ? new Date(task.dueDate).toLocaleTimeString('en-US', {
+            const dueTime = task.due_date ? new Date(task.due_date).toLocaleTimeString('en-US', {
               hour: 'numeric',
               minute: '2-digit',
               timeZone: user.timezone || 'America/New_York'

@@ -37,6 +37,21 @@ class Task {
   }
 
   /**
+   * Find task by ID
+   */
+  static async findById(taskId) {
+    const { data, error } = await supabase
+      .from('tasks')
+      .select('*')
+      .eq('id', taskId)
+      .single();
+
+    if (error) throw error;
+
+    return data ? new Task(data) : null;
+  }
+
+  /**
    * Find tasks by user ID
    */
   static async findByUserId(userId, status = null) {
