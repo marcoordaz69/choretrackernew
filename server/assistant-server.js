@@ -26,6 +26,193 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true })); // For Twilio webhooks
 app.use(morgan('dev'));
 
+// SMS Terms & Consent page for Twilio compliance
+app.get('/terms', (req, res) => {
+  const html = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Personal Assistant - Terms of Use & SMS Consent</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: 40px auto;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      padding: 40px;
+    }
+
+    h1 {
+      color: #667eea;
+      margin-bottom: 10px;
+      font-size: 2em;
+    }
+
+    .subtitle {
+      color: #666;
+      margin-bottom: 30px;
+      font-size: 0.95em;
+    }
+
+    h2 {
+      color: #764ba2;
+      margin-top: 30px;
+      margin-bottom: 15px;
+      font-size: 1.5em;
+    }
+
+    p, li {
+      margin-bottom: 12px;
+      color: #444;
+    }
+
+    ul {
+      margin-left: 20px;
+      margin-bottom: 20px;
+    }
+
+    .highlight {
+      background: #f0f0ff;
+      padding: 20px;
+      border-left: 4px solid #667eea;
+      margin: 25px 0;
+      border-radius: 4px;
+    }
+
+    .highlight strong {
+      color: #667eea;
+    }
+
+    .contact {
+      background: #f9f9f9;
+      padding: 20px;
+      border-radius: 8px;
+      margin-top: 30px;
+    }
+
+    .footer {
+      text-align: center;
+      margin-top: 40px;
+      padding-top: 20px;
+      border-top: 1px solid #eee;
+      color: #888;
+      font-size: 0.9em;
+    }
+
+    @media (max-width: 600px) {
+      .container {
+        padding: 25px;
+        margin: 20px auto;
+      }
+
+      h1 {
+        font-size: 1.6em;
+      }
+
+      h2 {
+        font-size: 1.3em;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Personal Assistant Service</h1>
+    <p class="subtitle">Terms of Use & SMS Messaging Consent</p>
+
+    <h2>Service Description</h2>
+    <p>
+      Welcome to your Personal Assistant! This service provides AI-powered life coaching and task management
+      through SMS messaging and voice calls. Our assistant helps you:
+    </p>
+    <ul>
+      <li>Track habits and achieve goals</li>
+      <li>Manage tasks with smart reminders</li>
+      <li>Daily check-ins and reflections</li>
+      <li>Personalized productivity insights</li>
+      <li>Conversational assistance via SMS and phone</li>
+    </ul>
+
+    <h2>SMS Messaging Consent</h2>
+
+    <div class="highlight">
+      <p><strong>By using this service, you consent to receive SMS text messages</strong> from our personal
+      assistant service. These messages may include:</p>
+      <ul>
+        <li>Task reminders and notifications</li>
+        <li>Daily check-ins and habit tracking prompts</li>
+        <li>Responses to your questions and requests</li>
+        <li>Goal progress updates and insights</li>
+        <li>System notifications and service updates</li>
+      </ul>
+    </div>
+
+    <p><strong>Message Frequency:</strong> Messages will be sent as needed based on your requests, scheduled
+    reminders, and configured check-in times. Frequency varies depending on your usage and preferences.</p>
+
+    <p><strong>Message and Data Rates:</strong> Standard message and data rates may apply. Please check with
+    your mobile carrier for details about your plan.</p>
+
+    <h2>Opt-Out & Privacy</h2>
+
+    <p><strong>To Unsubscribe:</strong> You can opt out of receiving messages at any time by texting
+    <strong>STOP</strong> to our service number. You will receive a confirmation message, and no further
+    messages will be sent.</p>
+
+    <p><strong>To Resubscribe:</strong> If you've opted out and want to receive messages again, text
+    <strong>START</strong> to our service number.</p>
+
+    <p><strong>For Help:</strong> Text <strong>HELP</strong> for assistance or contact information.</p>
+
+    <p><strong>Privacy:</strong> We respect your privacy. Your messages and personal information are kept
+    confidential and are not shared with third parties except as necessary to provide the service or as
+    required by law.</p>
+
+    <div class="contact">
+      <h2>Contact & Support</h2>
+      <p>If you have questions about this service or need assistance:</p>
+      <ul>
+        <li><strong>Text:</strong> Reply to any message from our service</li>
+        <li><strong>Email:</strong> support@yourdomain.com</li>
+      </ul>
+      <p>We're here to help make your life easier!</p>
+    </div>
+
+    <div class="footer">
+      <p>Last Updated: October 2025</p>
+      <p>Personal Assistant Service - Transforming Lives Through AI</p>
+    </div>
+  </div>
+</body>
+</html>
+  `;
+
+  res.send(html);
+});
+
+// Alternate route alias for SMS consent
+app.get('/sms-consent', (req, res) => {
+  res.redirect(301, '/terms');
+});
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({
