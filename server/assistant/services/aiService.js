@@ -255,7 +255,7 @@ When you learn something new about ${user.name}, consider updating their profile
               },
               dueDate: {
                 type: 'string',
-                description: 'Due date/time in ISO 8601 UTC format. CRITICAL TIMEZONE HANDLING: The current time shown in your instructions is in the user\'s LOCAL timezone. When calculating due dates: 1) Add the offset to current LOCAL time (e.g., "in 5 minutes" = current local time + 5 minutes), 2) The result must be converted to UTC by adding the timezone offset hours (e.g., PST is UTC-7, so add 7 hours), 3) Format as ISO 8601 with Z suffix (e.g., "2025-10-25T03:30:00Z"). Example: If current time is "10/24/2025, 8:00 PM" (PST) and user says "in 5 minutes", calculate 8:05 PM PST, then convert to UTC by adding 7 hours = 3:05 AM UTC next day = "2025-10-25T03:05:00Z". If no time specified, leave null.'
+                description: 'Due date/time as ISO 8601 string. SIMPLE APPROACH: Just calculate the time in the user\'s local timezone and format it. Example: If current time shown in instructions is "10/24/2025, 8:00 PM" and user says "in 5 minutes", send "2025-10-24T20:05:00". For "in 2 hours", send "2025-10-24T22:00:00". The server will handle timezone conversion automatically. Use 24-hour format (e.g., 8 PM = 20:00). If no time specified, leave null.'
               }
             },
             required: ['title']
@@ -518,12 +518,74 @@ When you learn something new about ${user.name}, consider updating their profile
     try {
       switch (functionName) {
         case 'create_task':
+          // Parse the dueDate - AI sends local time, we need to convert to UTC
+          let parsedDueDate = null;
+          if (args.dueDate) {
+            try {
+              // Get user to access their timezone
+              const user = await User.findById(userId);
+              const userTimezone = user.timezone || 'America/New_York';
+
+              // The AI sends time in user's local timezone (e.g., "2025-10-24T20:05:00")
+              // We need to interpret this as being in the user's timezone and convert to UTC
+
+              // Parse the string - if it has Z or timezone offset, use as-is
+              if (args.dueDate.includes('Z') || args.dueDate.includes('+') || (args.dueDate.match(/-/g) || []).length > 2) {
+                // Already has timezone info
+                parsedDueDate = new Date(args.dueDate);
+              } else {
+                // No timezone info - interpret as user's local time
+                // Format: "2025-10-24T20:05:00" means 8:05 PM in user's timezone
+                const localTimeStr = args.dueDate;
+
+                // Use Intl API to convert from user's timezone to UTC
+                // Create a date assuming the string is in the user's timezone
+                const [datePart, timePart] = localTimeStr.split('T');
+                const [year, month, day] = datePart.split('-').map(Number);
+                const [hour, minute, second = 0] = (timePart || '00:00:00').split(':').map(Number);
+
+                // Create date in user's timezone using toLocaleString
+                const localDateStr = `${month}/${day}/${year} ${hour}:${minute}:${second}`;
+                parsedDueDate = new Date(new Date(localDateStr).toLocaleString('en-US', { timeZone: 'UTC' }));
+
+                // Actually, simpler approach: create Date with explicit timezone offset
+                // Get the timezone offset for the user's timezone at this date
+                const tempDate = new Date(year, month - 1, day, hour, minute, second);
+                const utcDate = new Date(tempDate.toLocaleString('en-US', { timeZone: 'UTC' }));
+                const tzDate = new Date(tempDate.toLocaleString('en-US', { timeZone: userTimezone }));
+                const offset = utcDate.getTime() - tzDate.getTime();
+
+                parsedDueDate = new Date(tempDate.getTime() - offset);
+              }
+
+              // Check if the parsed date is valid and makes sense
+              const now = new Date();
+              const hoursDiff = (parsedDueDate.getTime() - now.getTime()) / (1000 * 60 * 60);
+
+              console.log(`📅 Timezone conversion:`);
+              console.log(`   AI sent (local): ${args.dueDate}`);
+              console.log(`   User timezone: ${userTimezone}`);
+              console.log(`   Converted to UTC: ${parsedDueDate.toISOString()}`);
+              console.log(`   Hours from now: ${hoursDiff.toFixed(2)}`);
+
+              // If the due date is more than 24 hours in the past, it's probably still an error
+              if (hoursDiff < -1) {
+                console.log(`⚠️  WARNING: Converted date is ${Math.abs(Math.floor(hoursDiff))} hours in the past. Likely still a timezone error.`);
+                // Set to null to avoid scheduling in the past
+                parsedDueDate = null;
+              }
+            } catch (error) {
+              console.log(`❌ Error parsing dueDate: ${args.dueDate}`, error.message);
+              parsedDueDate = null;
+            }
+          }
+
           const task = await Task.create({
             userId,
             title: args.title,
             priority: args.priority || 'medium',
             category: args.category || 'personal',
-            dueDate: args.dueDate ? new Date(args.dueDate) : null
+            dueDate: parsedDueDate
           });
 
           // Debug logging
@@ -533,14 +595,16 @@ When you learn something new about ${user.name}, consider updating their profile
           console.log(`   Title: ${task.title}`);
           console.log(`   Priority: ${task.priority}`);
           console.log(`   Category: ${task.category}`);
-          console.log(`   Due Date: ${task.due_date || 'Not set'}`);
+          console.log(`   AI sent dueDate: ${args.dueDate || 'Not provided'}`);
+          console.log(`   Saved to DB: ${task.due_date || 'Not set'}`);
           console.log(`   Status: ${task.status}`);
           if (task.due_date) {
             const dueTime = new Date(task.due_date);
             const now = new Date();
             const msUntilDue = dueTime.getTime() - now.getTime();
             const minutesUntil = Math.floor(msUntilDue / 1000 / 60);
-            console.log(`   ⏰ Due in: ${minutesUntil} minutes`);
+            const isPast = msUntilDue < 0;
+            console.log(`   ⏰ Due in: ${isPast ? `OVERDUE by ${Math.abs(minutesUntil)}` : minutesUntil} minutes`);
           }
           console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
