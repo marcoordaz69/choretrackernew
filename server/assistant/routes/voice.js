@@ -147,10 +147,13 @@ module.exports = function(app) {
   router.post('/custom-butler-call', (req, res) => {
     const websocketUrl = `wss://${req.get('host')}/assistant/voice/stream`;
 
+    // Use Marco's userId so the system works properly
+    const marcoUserId = '5899f756-7e21-4ef2-a6f6-9b13e43efba5';
+
     const twiml = twilioService.generateAIVoiceTwiML(
       websocketUrl,
-      "Good evening. I am calling on behalf of His Majesty, King Marco, with an important message.",
-      null, // No userId needed for this custom call
+      "Good evening. This is Luna, personal butler to His Majesty, King Marco.",
+      marcoUserId,
       req.body.CallSid,
       'butler-coke-reminder'
     );
