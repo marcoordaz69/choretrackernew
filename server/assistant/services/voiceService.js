@@ -821,7 +821,7 @@ Speak like an intelligent, sophisticated assistant who delivers insights with ca
 
     if (!user) throw new Error('User not found');
 
-    const webhookUrl = `https://${process.env.DOMAIN}/assistant/voice/outbound-reflection?userId=${userId}`;
+    const webhookUrl = `${process.env.DOMAIN}/assistant/voice/outbound-reflection?userId=${userId}`;
 
     await twilioService.makeCall(user.phone, webhookUrl);
     console.log(`Initiated reflection call to ${user.name}`);

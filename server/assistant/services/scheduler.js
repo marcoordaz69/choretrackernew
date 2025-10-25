@@ -175,7 +175,7 @@ class Scheduler {
         if (shouldCall) {
           console.log(`Initiating motivational wake-up call for ${user.name} (${user.phone})`);
 
-          const webhookUrl = `https://${process.env.DOMAIN}/assistant/voice/motivational-wakeup?userId=${user.id}`;
+          const webhookUrl = `${process.env.DOMAIN}/assistant/voice/motivational-wakeup?userId=${user.id}`;
           await twilioService.makeCall(user.phone, webhookUrl);
 
           console.log(`Motivational wake-up call initiated for ${user.name}`);
@@ -327,7 +327,7 @@ class Scheduler {
           console.log(`   Priority: ${task.priority}`);
           console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
-          const webhookUrl = `https://${process.env.DOMAIN}/assistant/voice/task-reminder?userId=${user.id}&taskId=${task.id}`;
+          const webhookUrl = `${process.env.DOMAIN}/assistant/voice/task-reminder?userId=${user.id}&taskId=${task.id}`;
           await twilioService.makeCall(user.phone, webhookUrl);
 
           console.log(`✅ Task reminder call initiated for ${user.name}: ${task.title}`);
