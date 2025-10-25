@@ -538,24 +538,43 @@ When you learn something new about ${user.name}, consider updating their profile
                 // Format: "2025-10-24T20:05:00" means 8:05 PM in user's timezone
                 const localTimeStr = args.dueDate;
 
-                // Use Intl API to convert from user's timezone to UTC
-                // Create a date assuming the string is in the user's timezone
+                // Parse the components
                 const [datePart, timePart] = localTimeStr.split('T');
                 const [year, month, day] = datePart.split('-').map(Number);
                 const [hour, minute, second = 0] = (timePart || '00:00:00').split(':').map(Number);
 
-                // Create date in user's timezone using toLocaleString
-                const localDateStr = `${month}/${day}/${year} ${hour}:${minute}:${second}`;
-                parsedDueDate = new Date(new Date(localDateStr).toLocaleString('en-US', { timeZone: 'UTC' }));
+                // CORRECT approach: Create a date string with timezone, let Date parse it
+                // But first we need to get the offset for user's timezone
+                // Trick: create a date in UTC, format it for user's TZ, see the difference
 
-                // Actually, simpler approach: create Date with explicit timezone offset
-                // Get the timezone offset for the user's timezone at this date
-                const tempDate = new Date(year, month - 1, day, hour, minute, second);
-                const utcDate = new Date(tempDate.toLocaleString('en-US', { timeZone: 'UTC' }));
-                const tzDate = new Date(tempDate.toLocaleString('en-US', { timeZone: userTimezone }));
-                const offset = utcDate.getTime() - tzDate.getTime();
+                // Step 1: Create what WOULD be this time in UTC
+                const utcDate = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
 
-                parsedDueDate = new Date(tempDate.getTime() - offset);
+                // Step 2: Format that UTC time as if it were in the user's timezone
+                const formatted = new Intl.DateTimeFormat('en-US', {
+                  timeZone: userTimezone,
+                  year: 'numeric',
+                  month: '2-digit',
+                  day: '2-digit',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  second: '2-digit',
+                  hour12: false
+                }).format(utcDate);
+
+                // Step 3: Parse that formatted string back (will be in local server time, likely UTC)
+                const [fDate, fTime] = formatted.split(', ');
+                const [fMonth, fDay, fYear] = fDate.split('/').map(Number);
+                const [fHour, fMinute, fSecond] = fTime.split(':').map(Number);
+                const formattedDate = new Date(fYear, fMonth - 1, fDay, fHour, fMinute, fSecond);
+
+                // Step 4: The offset is the difference
+                const offsetMs = utcDate.getTime() - formattedDate.getTime();
+
+                // Step 5: Apply offset to our target time
+                // If user said 9:00 PM PST, we want 4:00 AM UTC (next day)
+                const targetUtc = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+                parsedDueDate = new Date(targetUtc.getTime() + offsetMs);
               }
 
               // Check if the parsed date is valid and makes sense
