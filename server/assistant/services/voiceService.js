@@ -393,22 +393,16 @@ Delivery: Speak clearly with refined pronunciation, slight British accent in cad
    * Handle events from OpenAI Realtime API
    */
   async handleOpenAIEvent(event, session) {
-    // Log all events for debugging
-    const logEventTypes = [
-      'error', 'response.content.done', 'rate_limits.updated',
-      'response.done', 'input_audio_buffer.committed',
-      'input_audio_buffer.speech_stopped', 'input_audio_buffer.speech_started',
-      'session.created', 'session.updated', 'response.created',
-      'conversation.item.created', 'conversation.item.input_audio_transcription.completed',
-      'response.output_audio.delta', 'response.output_audio.done',
-      'response.output_item.done', 'response.output_audio_transcript.done'
-    ];
-
-    if (logEventTypes.includes(event.type)) {
-      if (event.type === 'response.output_audio.delta') {
-        console.log('OpenAI event: response.output_audio.delta - delta length:', event.delta ? event.delta.length : 'NO DELTA');
+    // Log ALL events to debug function calls
+    if (event.type === 'response.output_audio.delta') {
+      console.log('OpenAI event: response.output_audio.delta - delta length:', event.delta ? event.delta.length : 'NO DELTA');
+    } else {
+      console.log('🔍 OpenAI event:', event.type);
+      // Log full event for function-related events
+      if (event.type.includes('function') || event.type.includes('output_item')) {
+        console.log('   Full event:', JSON.stringify(event, null, 2));
       } else {
-        console.log('OpenAI event:', event.type, JSON.stringify(event).substring(0, 200));
+        console.log('   Summary:', JSON.stringify(event).substring(0, 200));
       }
     }
 
@@ -553,8 +547,18 @@ Delivery: Speak clearly with refined pronunciation, slight British accent in cad
         break;
 
       case 'response.output_item.done':
+        console.log('📋 response.output_item.done received');
+        console.log('   event.item exists?', !!event.item);
+        console.log('   event.item.type:', event.item?.type);
+
         // Check if this is a function call
         if (event.item && event.item.type === 'function_call') {
+          console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+          console.log('🔧 FUNCTION CALL DETECTED IN VOICE');
+          console.log('   Function:', event.item.name);
+          console.log('   Arguments:', event.item.arguments);
+          console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
           const functionName = event.item.name;
           const args = JSON.parse(event.item.arguments);
           console.log('[FUNCTION CALL] Executing:', functionName, args);
@@ -579,6 +583,8 @@ Delivery: Speak clearly with refined pronunciation, slight British accent in cad
           session.openAIWs.send(JSON.stringify({
             type: 'response.create'
           }));
+        } else {
+          console.log('   ⚠️  Not a function call, just regular output item');
         }
         break;
 
