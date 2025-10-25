@@ -143,5 +143,20 @@ module.exports = function(app) {
     res.type('text/xml').send(twiml);
   });
 
+  // Custom butler call for wife's coke reminder
+  router.post('/custom-butler-call', (req, res) => {
+    const websocketUrl = `wss://${req.get('host')}/assistant/voice/stream`;
+
+    const twiml = twilioService.generateAIVoiceTwiML(
+      websocketUrl,
+      "Good evening. I am calling on behalf of His Majesty, King Marco, with an important message.",
+      null, // No userId needed for this custom call
+      req.body.CallSid,
+      'butler-coke-reminder'
+    );
+
+    res.type('text/xml').send(twiml);
+  });
+
   return router;
 };
