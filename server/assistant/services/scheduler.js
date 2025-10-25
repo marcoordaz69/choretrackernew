@@ -31,6 +31,12 @@ class Scheduler {
     });
     this.jobs.push(motivationalJob);
 
+    // Task reminder calls - runs every minute to check for tasks due now
+    const taskReminderJob = cron.schedule('* * * * *', async () => {
+      await this.processTaskReminderCalls();
+    });
+    this.jobs.push(taskReminderJob);
+
     // Proactive nudges - runs every 30 minutes
     const nudgeJob = cron.schedule('*/30 * * * *', async () => {
       await this.processProactiveNudges();
@@ -265,6 +271,55 @@ class Scheduler {
 
       await twilioService.sendSMS(user.phone, message);
       console.log(`Task deadline reminder sent to ${user.name}: ${tasks.length} tasks`);
+    }
+  }
+
+  /**
+   * Check for tasks that are due now and trigger voice reminder calls
+   */
+  async processTaskReminderCalls() {
+    const Task = require('../models/Task');
+    const now = new Date();
+
+    try {
+      // Get all active users
+      const allUsers = await User.findAll();
+      const activeUsers = allUsers.filter(user => user.active && user.onboarded);
+
+      for (const user of activeUsers) {
+        // Find pending tasks for this user
+        const allTasks = await Task.findPending(user.id);
+
+        // Filter tasks that are due within the current minute
+        const dueNowTasks = allTasks.filter(t => {
+          if (!t.due_date) return false;
+
+          const dueDate = new Date(t.due_date);
+          const currentMinute = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), now.getMinutes());
+          const nextMinute = new Date(currentMinute.getTime() + 60 * 1000);
+
+          // Task is due if its due time is in the current minute
+          return dueDate >= currentMinute && dueDate < nextMinute;
+        });
+
+        // Trigger voice call for each due task
+        for (const task of dueNowTasks) {
+          console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+          console.log('🔔 TASK REMINDER CALL TRIGGERED BY SCHEDULER');
+          console.log(`   User: ${user.name}`);
+          console.log(`   Task: ${task.title}`);
+          console.log(`   Due: ${new Date(task.due_date).toLocaleTimeString()}`);
+          console.log(`   Priority: ${task.priority}`);
+          console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+          const webhookUrl = `https://${process.env.DOMAIN}/assistant/voice/task-reminder?userId=${user.id}&taskId=${task.id}`;
+          await twilioService.makeCall(user.phone, webhookUrl);
+
+          console.log(`✅ Task reminder call initiated for ${user.name}: ${task.title}`);
+        }
+      }
+    } catch (error) {
+      console.error('Error in processTaskReminderCalls:', error);
     }
   }
 

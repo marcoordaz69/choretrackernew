@@ -525,6 +525,25 @@ When you learn something new about ${user.name}, consider updating their profile
             category: args.category || 'personal',
             dueDate: args.dueDate ? new Date(args.dueDate) : null
           });
+
+          // Debug logging
+          console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+          console.log('🎯 TASK CREATED VIA VOICE');
+          console.log(`   Task ID: ${task.id}`);
+          console.log(`   Title: ${task.title}`);
+          console.log(`   Priority: ${task.priority}`);
+          console.log(`   Category: ${task.category}`);
+          console.log(`   Due Date: ${task.due_date || 'Not set'}`);
+          console.log(`   Status: ${task.status}`);
+          if (task.due_date) {
+            const dueTime = new Date(task.due_date);
+            const now = new Date();
+            const msUntilDue = dueTime.getTime() - now.getTime();
+            const minutesUntil = Math.floor(msUntilDue / 1000 / 60);
+            console.log(`   ⏰ Due in: ${minutesUntil} minutes`);
+          }
+          console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
           return { type: 'task_created', data: task };
 
         case 'log_habit':
