@@ -88,11 +88,14 @@ class Scheduler {
         //   continue;
         // }
 
-        // Generate and send morning briefing
-        const briefing = await aiService.generateMorningBriefing(user.id);
-        await twilioService.sendSMS(user.phone, briefing);
+        // Initiate morning briefing voice call
+        const domain = process.env.DOMAIN || 'https://choretrackernew-production.up.railway.app';
+        const baseUrl = domain.startsWith('http') ? domain : `https://${domain}`;
+        const webhookUrl = `${baseUrl}/assistant/voice/morning-briefing?userId=${user.id}`;
 
-        console.log(`Morning briefing sent to ${user.name} (${user.phone})`);
+        await twilioService.makeCall(user.phone, webhookUrl);
+
+        console.log(`Morning briefing call initiated for ${user.name} (${user.phone})`);
       }
     } catch (error) {
       console.error('Error processing morning check-ins:', error);

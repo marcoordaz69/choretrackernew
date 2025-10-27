@@ -141,6 +141,9 @@ Be DIRECT, FIRM, and EMOTIONAL. Don't hold back. This is an intervention!`;
         } else if (customMode === 'motivational-wakeup') {
           // Morning motivational call with real user data
           instructions = await this.getMotivationalWakeupInstructions(user);
+        } else if (customMode === 'morning-briefing') {
+          // Evening briefing about tomorrow's prep
+          instructions = await this.getMorningBriefingInstructions(user);
         } else if (customMode && customMode.startsWith('task-reminder:')) {
           // Task reminder call
           const taskId = customMode.replace('task-reminder:', '');
@@ -834,6 +837,166 @@ Length: 2-3 minutes - focused and impactful
 BE SPECIFIC. Use their actual data. Reference real numbers, real streaks, real wins. This makes it PERSONAL and POWERFUL!
 
 Speak like an intelligent, sophisticated assistant who delivers insights with calm confidence - not rushed energy.`;
+  }
+
+  /**
+   * Get morning briefing instructions with tomorrow's context
+   */
+  async getMorningBriefingInstructions(user) {
+    const aiService = require('./aiService');
+    const Goal = require('../models/Goal');
+    const Task = require('../models/Task');
+    const Habit = require('../models/Habit');
+
+    // Get user context
+    const learningData = user.ai_context?.learningData || {};
+
+    // Calculate tomorrow's date range
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(0, 0, 0, 0);
+    const tomorrowEnd = new Date(tomorrow);
+    tomorrowEnd.setHours(23, 59, 59, 999);
+
+    // Get active goals with progress
+    const goals = await Goal.findByUserId(user.id);
+    const activeGoals = goals.filter(g => g.status === 'active');
+
+    // Get tasks due tomorrow
+    const allTasks = await Task.findPending(user.id);
+    const tomorrowTasks = allTasks.filter(t => {
+      if (!t.due_date) return false;
+      const dueDate = new Date(t.due_date);
+      return dueDate >= tomorrow && dueDate <= tomorrowEnd;
+    });
+
+    // Get active habits that need to be completed tomorrow
+    const habits = await Habit.findByUserId(user.id);
+    const activeHabits = habits.filter(h => h.active);
+
+    // Build goals summary with whys
+    let goalsText = '';
+    if (activeGoals.length > 0) {
+      goalsText = '\n\nTOMORROW\'S GOALS TO ADVANCE:\n' + activeGoals.map(g => {
+        const metric = g.metric ? ` (${g.metric.current}/${g.metric.target} ${g.metric.unit} - ${g.progress}% complete)` : '';
+        const why = g.why ? `\n  WHY: ${g.why}` : '';
+        return `- ${g.title}${metric}${why}`;
+      }).join('\n');
+    }
+
+    // Build tomorrow's tasks
+    let tasksText = '';
+    if (tomorrowTasks.length > 0) {
+      tasksText = '\n\nTOMORROW\'S TASKS:\n' + tomorrowTasks.map(t => {
+        const dueTime = t.due_date ? new Date(t.due_date).toLocaleTimeString('en-US', {
+          hour: 'numeric',
+          minute: '2-digit',
+          timeZone: user.timezone || 'America/New_York'
+        }) : '';
+        const timeStr = dueTime ? ` at ${dueTime}` : '';
+        const priority = t.priority === 'high' ? ' [HIGH PRIORITY]' : '';
+        return `- ${t.title}${timeStr}${priority}`;
+      }).join('\n');
+    }
+
+    // Build habits for tomorrow
+    let habitsText = '';
+    if (activeHabits.length > 0) {
+      habitsText = '\n\nHABITS TO MAINTAIN:\n' + activeHabits.map(h => {
+        const streak = h.currentStreak || 0;
+        return `- ${h.name} (${streak} day streak 🔥)`;
+      }).join('\n');
+    }
+
+    // Build motivations/whys context
+    let whysText = '';
+    if (learningData.motivations && learningData.motivations.length > 0) {
+      whysText = '\n\nYOUR WHYS (remind them of these):\n' + learningData.motivations.map(m => `- ${m}`).join('\n');
+    }
+
+    // Build values/interests
+    let contextText = '';
+    if (learningData.values || learningData.interests) {
+      contextText += '\n\nWHO YOU ARE:';
+      if (learningData.values) {
+        contextText += `\nCore Values: ${learningData.values.join(', ')}`;
+      }
+      if (learningData.interests) {
+        contextText += `\nInterests: ${learningData.interests.join(', ')}`;
+      }
+    }
+
+    const tomorrowDay = tomorrow.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+
+    return `You are Luna, ${user.name}'s personal assistant, calling for their evening briefing about TOMORROW.
+
+This is ${user.name}'s TOMORROW MORNING PREP CALL at 6:30 PM tonight. You're briefing them on tomorrow (${tomorrowDay}) so they can prepare mentally and plan their day.
+
+Your approach:
+
+1. WARM GREETING & CONTEXT:
+   "Good evening ${user.name}! I'm calling to brief you on tomorrow so you can prepare and set yourself up for success."
+
+2. REMIND THEM OF THEIR WHYS - Start with purpose:
+${whysText}
+${contextText}
+   - "Before we dive into tomorrow, let's remember WHY you're doing this..."
+   - Reference specific motivations from their profile
+   - Connect tomorrow's activities to their deeper purpose
+
+3. TOMORROW'S BIG PICTURE - Set the outlook:
+   - "So tomorrow is ${tomorrowDay}. Here's what you're working toward..."
+   - Paint the vision for the day
+   - Set positive expectations
+
+4. GOALS REVIEW - Connect daily actions to bigger goals:
+${goalsText}
+   - Reference specific progress numbers
+   - Show how tomorrow's work advances these goals
+   - Remind them of goal WHYs
+
+5. TOMORROW'S SCHEDULE - Build it together:
+${tasksText}
+${habitsText}
+
+   ASK INTERACTIVE QUESTIONS:
+   - "What time do you want to wake up tomorrow?"
+   - "When will you tackle [specific high-priority task]?"
+   - "What time works best for [habit]?"
+   - Help them visualize the day hour-by-hour
+   - Suggest optimal sequencing based on their energy patterns
+
+6. PRIORITIES & FOCUS:
+   - "If you could only accomplish ONE thing tomorrow, what would move the needle most?"
+   - Help them identify the 2-3 must-dos vs nice-to-haves
+   - Set clear success criteria for tomorrow
+
+7. MENTAL PREPARATION:
+   - "How are you feeling about tomorrow? Any concerns?"
+   - Address any anxiety or blockers
+   - Build confidence: "You've got everything you need to make tomorrow great"
+
+8. INSPIRING CLOSE:
+   - "Tomorrow is another step toward [their big goal]"
+   - "Remember your why: [specific motivation]"
+   - "Get good rest tonight. Tomorrow, you're going to [specific accomplishment]"
+   - "I'll be here if you need me. You've got this!"
+
+Tone: CALM, SOPHISTICATED, INTELLIGENT, REASSURING (like Jarvis from Iron Man)
+Pace: MEASURED and THOUGHTFUL - this is a planning conversation, not rushed
+Style: Sophisticated AI assistant - strategic, insightful, supportive
+Length: 3-5 minutes - comprehensive briefing with interactive planning
+Approach: CONVERSATIONAL - ask questions, listen, help them think through tomorrow
+
+KEY BEHAVIORS:
+- BE SPECIFIC with their actual goals, tasks, and motivations
+- ASK QUESTIONS to make this interactive, not just a monologue
+- HELP THEM PLAN by suggesting times and sequences
+- CONNECT daily tasks to bigger whys and goals
+- BUILD CONFIDENCE and positive anticipation for tomorrow
+
+This is about PREPARATION and MENTAL READINESS for tomorrow, not just listing tasks.`;
   }
 
   /**
