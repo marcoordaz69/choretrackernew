@@ -76,6 +76,20 @@ class Habit {
   }
 
   /**
+   * Find habit by name (fuzzy match)
+   */
+  static async findByName(userId, habitName) {
+    const habits = await this.findByUserId(userId, true);
+
+    // Try case-insensitive fuzzy match
+    const nameToMatch = habitName.toLowerCase();
+    return habits.find(h =>
+      h.name.toLowerCase().includes(nameToMatch) ||
+      nameToMatch.includes(h.name.toLowerCase())
+    ) || null;
+  }
+
+  /**
    * Log habit completion
    */
   async logCompletion(value = null, notes = '') {

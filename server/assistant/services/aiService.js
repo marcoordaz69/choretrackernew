@@ -774,11 +774,7 @@ When you learn something new about ${user.name}, consider updating their profile
           };
 
         case 'log_habit':
-          const habit = await Habit.findOne({
-            userId,
-            name: { $regex: new RegExp(args.habitName, 'i') },
-            active: true
-          });
+          const habit = await Habit.findByName(userId, args.habitName);
 
           if (habit) {
             await habit.logCompletion(args.value, args.notes);
@@ -897,16 +893,15 @@ When you learn something new about ${user.name}, consider updating their profile
   async generateMorningBriefing(userId) {
     const user = await User.findById(userId);
     const checkIn = await DailyCheckIn.getTodayCheckIn(userId);
-    const tasks = await Task.find({
-      userId,
-      status: 'pending',
-      $or: [
-        { dueDate: { $lte: new Date() } },
-        { dueDate: null }
-      ]
-    }).limit(5);
 
-    const habits = await Habit.find({ userId, active: true }).limit(5);
+    // Get pending tasks (due today or overdue or no due date)
+    const allPendingTasks = await Task.findPending(userId);
+    const now = new Date();
+    const tasks = allPendingTasks
+      .filter(task => !task.due_date || new Date(task.due_date) <= now)
+      .slice(0, 5);
+
+    const habits = (await Habit.findByUserId(userId, true)).slice(0, 5);
 
     let briefing = `Good morning ${user.name}! `;
 
@@ -942,13 +937,16 @@ When you learn something new about ${user.name}, consider updating their profile
     const user = await User.findById(userId);
     const checkIn = await DailyCheckIn.getTodayCheckIn(userId);
 
-    const completedTasks = await Task.find({
-      userId,
-      status: 'completed',
-      completedAt: {
-        $gte: new Date(new Date().setHours(0, 0, 0, 0))
-      }
-    });
+    // Get all user's tasks and filter completed today
+    const allTasks = await Task.findByUserId(userId);
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const completedTasks = allTasks.filter(task =>
+      task.status === 'completed' &&
+      task.completed_at &&
+      new Date(task.completed_at) >= todayStart
+    );
 
     let reflection = `Hey ${user.name}! Time to reflect. `;
 
