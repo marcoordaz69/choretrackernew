@@ -26,12 +26,12 @@ async function testFunctionTools() {
 
     // Test 1: create_task
     console.log('1️⃣  Testing create_task...');
-    const createTaskResult = await aiService.executeFunctionCall('create_task', {
+    const createTaskResult = await aiService.executeFunctionCall(user.id, 'create_task', {
       title: 'Test task from function tool',
       priority: 'medium',
       category: 'personal',
       dueDate: new Date(Date.now() + 1000 * 60 * 60).toISOString() // 1 hour from now
-    }, user.id);
+    });
     console.log(`   Result: ${createTaskResult.type}`);
     if (createTaskResult.type === 'task_created') {
       console.log(`   ✅ Task created: ${createTaskResult.data.title}`);
@@ -44,9 +44,9 @@ async function testFunctionTools() {
     // Test 2: complete_task
     if (createTaskResult.type === 'task_created') {
       console.log('\n2️⃣  Testing complete_task...');
-      const completeTaskResult = await aiService.executeFunctionCall('complete_task', {
+      const completeTaskResult = await aiService.executeFunctionCall(user.id, 'complete_task', {
         taskId: createTaskResult.data.id
-      }, user.id);
+      });
       console.log(`   Result: ${completeTaskResult.type}`);
       if (completeTaskResult.type === 'task_completed') {
         console.log(`   ✅ Task completed: ${completeTaskResult.data.title}`);
@@ -59,18 +59,18 @@ async function testFunctionTools() {
 
     // Test 3: reschedule_task (create new task first)
     console.log('\n3️⃣  Testing reschedule_task...');
-    const taskForReschedule = await aiService.executeFunctionCall('create_task', {
+    const taskForReschedule = await aiService.executeFunctionCall(user.id, 'create_task', {
       title: 'Task to reschedule',
       priority: 'low',
       category: 'personal',
       dueDate: new Date(Date.now() + 1000 * 60 * 60).toISOString()
-    }, user.id);
+    });
 
     if (taskForReschedule.type === 'task_created') {
-      const rescheduleResult = await aiService.executeFunctionCall('reschedule_task', {
+      const rescheduleResult = await aiService.executeFunctionCall(user.id, 'reschedule_task', {
         taskId: taskForReschedule.data.id,
         newDueDate: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString() // Tomorrow
-      }, user.id);
+      });
       console.log(`   Result: ${rescheduleResult.type}`);
       if (rescheduleResult.type === 'task_rescheduled') {
         console.log(`   ✅ Task rescheduled`);
@@ -83,11 +83,11 @@ async function testFunctionTools() {
 
     // Test 4: log_habit
     console.log('\n4️⃣  Testing log_habit...');
-    const logHabitResult = await aiService.executeFunctionCall('log_habit', {
+    const logHabitResult = await aiService.executeFunctionCall(user.id, 'log_habit', {
       habitName: 'Test habit',
       value: null,
       notes: 'Logged from function tool test'
-    }, user.id);
+    });
     console.log(`   Result: ${logHabitResult.type}`);
     if (logHabitResult.type === 'habit_logged' || logHabitResult.type === 'habit_created_and_logged') {
       console.log(`   ✅ Habit logged`);
@@ -99,13 +99,13 @@ async function testFunctionTools() {
 
     // Test 5: create_goal
     console.log('\n5️⃣  Testing create_goal...');
-    const createGoalResult = await aiService.executeFunctionCall('create_goal', {
+    const createGoalResult = await aiService.executeFunctionCall(user.id, 'create_goal', {
       title: 'Test goal from function tool',
       category: 'personal',
       timeframe: 'monthly',
       targetValue: 100,
       unit: 'percent'
-    }, user.id);
+    });
     console.log(`   Result: ${createGoalResult.type}`);
     if (createGoalResult.type === 'goal_created') {
       console.log(`   ✅ Goal created: ${createGoalResult.data.title}`);
@@ -117,12 +117,12 @@ async function testFunctionTools() {
 
     // Test 6: update_daily_metrics
     console.log('\n6️⃣  Testing update_daily_metrics...');
-    const updateMetricsResult = await aiService.executeFunctionCall('update_daily_metrics', {
+    const updateMetricsResult = await aiService.executeFunctionCall(user.id, 'update_daily_metrics', {
       sleepQuality: 8,
       mood: 'good',
       energy: 7,
       exerciseMinutes: 45
-    }, user.id);
+    });
     console.log(`   Result: ${updateMetricsResult.type}`);
     if (updateMetricsResult.type === 'metrics_updated') {
       console.log(`   ✅ Daily metrics updated`);
@@ -134,14 +134,14 @@ async function testFunctionTools() {
 
     // Test 7: update_user_profile
     console.log('\n7️⃣  Testing update_user_profile...');
-    const updateProfileResult = await aiService.executeFunctionCall('update_user_profile', {
+    const updateProfileResult = await aiService.executeFunctionCall(user.id, 'update_user_profile', {
       aiContext: {
         learningData: {
           interests: ['testing', 'automation'],
           values: ['quality', 'reliability']
         }
       }
-    }, user.id);
+    });
     console.log(`   Result: ${updateProfileResult.type}`);
     if (updateProfileResult.type === 'profile_updated') {
       console.log(`   ✅ User profile updated`);
