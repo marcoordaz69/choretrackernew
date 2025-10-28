@@ -75,13 +75,16 @@ class Scheduler {
         }
 
         // Get current time in user's timezone
-        const userTime = now.toLocaleString('en-US', {
+        const formatter = new Intl.DateTimeFormat('en-US', {
           timeZone: user.timezone || 'America/New_York',
-          hour12: false,
           hour: '2-digit',
-          minute: '2-digit'
+          minute: '2-digit',
+          hour12: false
         });
-        const currentTime = userTime.split(', ')[1].substring(0, 5); // Extract HH:MM
+        const parts = formatter.formatToParts(now);
+        const hour = parts.find(p => p.type === 'hour').value;
+        const minute = parts.find(p => p.type === 'minute').value;
+        const currentTime = `${hour}:${minute}`;
 
         return user.preferences.morningCheckInTime === currentTime;
       });
@@ -126,13 +129,16 @@ class Scheduler {
         }
 
         // Get current time in user's timezone
-        const userTime = now.toLocaleString('en-US', {
+        const formatter = new Intl.DateTimeFormat('en-US', {
           timeZone: user.timezone || 'America/New_York',
-          hour12: false,
           hour: '2-digit',
-          minute: '2-digit'
+          minute: '2-digit',
+          hour12: false
         });
-        const currentTime = userTime.split(', ')[1].substring(0, 5); // Extract HH:MM
+        const parts = formatter.formatToParts(now);
+        const hour = parts.find(p => p.type === 'hour').value;
+        const minute = parts.find(p => p.type === 'minute').value;
+        const currentTime = `${hour}:${minute}`;
 
         return user.preferences.eveningCheckInTime === currentTime;
       });
@@ -182,13 +188,16 @@ class Scheduler {
         }
 
         // Get current time and day in user's timezone
-        const userTime = now.toLocaleString('en-US', {
+        const formatter = new Intl.DateTimeFormat('en-US', {
           timeZone: user.timezone || 'America/New_York',
-          hour12: false,
           hour: '2-digit',
-          minute: '2-digit'
+          minute: '2-digit',
+          hour12: false
         });
-        const currentTime = userTime.split(', ')[1].substring(0, 5); // Extract HH:MM
+        const parts = formatter.formatToParts(now);
+        const hour = parts.find(p => p.type === 'hour').value;
+        const minute = parts.find(p => p.type === 'minute').value;
+        const currentTime = `${hour}:${minute}`;
 
         return user.preferences.motivationalWakeupTime === currentTime;
       });
