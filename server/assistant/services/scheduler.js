@@ -66,20 +66,30 @@ class Scheduler {
    */
   async processMorningCheckIns() {
     try {
-      const now = new Date();
-      const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-
-      // Find users whose morning check-in time matches current time
-      // Supabase doesn't support complex JSONB queries easily, so we fetch all active users
-      // and filter in-memory (for now - can optimize with database functions later)
+      // Find users whose morning check-in time matches current time IN THEIR TIMEZONE
       const allUsers = await User.findAll();
-      const users = allUsers.filter(user =>
-        user.active &&
-        user.onboarded &&
-        user.preferences?.morningCheckInTime === currentTime
-      );
+      const now = new Date();
+      const users = allUsers.filter(user => {
+        if (!user.active || !user.onboarded || !user.preferences?.morningCheckInTime) {
+          return false;
+        }
 
-      console.log(`Processing morning check-ins for ${users.length} users at ${currentTime}`);
+        // Get current time in user's timezone
+        const userTime = now.toLocaleString('en-US', {
+          timeZone: user.timezone || 'America/New_York',
+          hour12: false,
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+        const currentTime = userTime.split(', ')[1].substring(0, 5); // Extract HH:MM
+
+        return user.preferences.morningCheckInTime === currentTime;
+      });
+
+      if (users.length > 0) {
+        const currentTime = now.toISOString();
+        console.log(`Processing morning check-ins for ${users.length} users at ${currentTime}`);
+      }
 
       for (const user of users) {
         // Quiet hours disabled
@@ -107,26 +117,49 @@ class Scheduler {
    */
   async processEveningCheckIns() {
     try {
-      const now = new Date();
-      const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-
+      // Find users whose evening check-in time matches current time IN THEIR TIMEZONE
       const allUsers = await User.findAll();
-      const users = allUsers.filter(user =>
-        user.active &&
-        user.onboarded &&
-        user.preferences?.eveningCheckInTime === currentTime
-      );
+      const now = new Date();
+      const users = allUsers.filter(user => {
+        if (!user.active || !user.onboarded || !user.preferences?.eveningCheckInTime) {
+          return false;
+        }
 
-      console.log(`Processing evening check-ins for ${users.length} users at ${currentTime}`);
+        // Get current time in user's timezone
+        const userTime = now.toLocaleString('en-US', {
+          timeZone: user.timezone || 'America/New_York',
+          hour12: false,
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+        const currentTime = userTime.split(', ')[1].substring(0, 5); // Extract HH:MM
+
+        return user.preferences.eveningCheckInTime === currentTime;
+      });
+
+      if (users.length > 0) {
+        console.log(`Processing evening check-ins for ${users.length} users at ${now.toISOString()}`);
+      }
 
       for (const user of users) {
         // Quiet hours disabled
         // if (user.isInQuietHours()) continue;
 
-        const reflection = await aiService.generateEveningReflection(user.id);
-        await twilioService.sendSMS(user.phone, reflection);
+        // Check if user prefers voice call for evening reflection
+        if (user.preferences?.eveningReflectionVoice) {
+          // Make voice call for wind-down reflection
+          const domain = process.env.DOMAIN || 'https://choretrackernew-production.up.railway.app';
+          const baseUrl = domain.startsWith('http') ? domain : `https://${domain}`;
+          const webhookUrl = `${baseUrl}/assistant/voice/wind-down-reflection?userId=${user.id}`;
 
-        console.log(`Evening reflection sent to ${user.name} (${user.phone})`);
+          await twilioService.makeCall(user.phone, webhookUrl);
+          console.log(`Wind-down reflection CALL initiated for ${user.name} (${user.phone})`);
+        } else {
+          // Send SMS as before
+          const reflection = await aiService.generateEveningReflection(user.id);
+          await twilioService.sendSMS(user.phone, reflection);
+          console.log(`Evening reflection SMS sent to ${user.name} (${user.phone})`);
+        }
       }
     } catch (error) {
       console.error('Error processing evening check-ins:', error);
@@ -140,21 +173,36 @@ class Scheduler {
     try {
       const voiceService = require('./voiceService');
       const now = new Date();
-      const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-      const currentDay = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][now.getDay()];
-      const todayDate = now.toISOString().split('T')[0]; // YYYY-MM-DD
 
+      // Find users whose wake-up time matches current time IN THEIR TIMEZONE
       const allUsers = await User.findAll();
-      const users = allUsers.filter(user =>
-        user.active &&
-        user.onboarded &&
-        user.preferences?.motivationalWakeupEnabled &&
-        user.preferences?.motivationalWakeupTime === currentTime
-      );
+      const users = allUsers.filter(user => {
+        if (!user.active || !user.onboarded || !user.preferences?.motivationalWakeupEnabled) {
+          return false;
+        }
+
+        // Get current time and day in user's timezone
+        const userTime = now.toLocaleString('en-US', {
+          timeZone: user.timezone || 'America/New_York',
+          hour12: false,
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+        const currentTime = userTime.split(', ')[1].substring(0, 5); // Extract HH:MM
+
+        return user.preferences.motivationalWakeupTime === currentTime;
+      });
 
       for (const user of users) {
         const days = user.preferences?.motivationalWakeupDays || [];
         let shouldCall = false;
+
+        // Get current day and date in user's timezone
+        const userDate = new Date(now.toLocaleString('en-US', {
+          timeZone: user.timezone || 'America/New_York'
+        }));
+        const currentDay = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][userDate.getDay()];
+        const todayDate = userDate.toISOString().split('T')[0]; // YYYY-MM-DD
 
         // Check if today is in the regular schedule
         if (days.includes(currentDay)) {
@@ -168,7 +216,7 @@ class Scheduler {
             shouldCall = true;
 
             // Update next Saturday to 2 weeks from now
-            const twoWeeksLater = new Date(now);
+            const twoWeeksLater = new Date(userDate);
             twoWeeksLater.setDate(twoWeeksLater.getDate() + 14);
             user.preferences.motivationalWakeupNextSaturday = twoWeeksLater.toISOString().split('T')[0];
             await user.save();
