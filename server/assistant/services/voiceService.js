@@ -144,6 +144,9 @@ Be DIRECT, FIRM, and EMOTIONAL. Don't hold back. This is an intervention!`;
         } else if (customMode === 'morning-briefing') {
           // Evening briefing about tomorrow's prep
           instructions = await this.getMorningBriefingInstructions(user);
+        } else if (customMode === 'wind-down-reflection') {
+          // Evening wind-down reflection
+          instructions = await this.getWindDownReflectionInstructions(user);
         } else if (customMode && customMode.startsWith('task-reminder:')) {
           // Task reminder call
           const taskId = customMode.replace('task-reminder:', '');
@@ -157,46 +160,36 @@ Be DIRECT, FIRM, and EMOTIONAL. Don't hold back. This is an intervention!`;
               hour: 'numeric',
               minute: '2-digit',
               timeZone: user.timezone || 'America/New_York'
-            }) : 'soon';
+            }) : 'now';
 
-            instructions = `You are Luna, ${user.name}'s personal assistant, calling to remind them about a task that's now due.
+            instructions = `You are Luna, ${user.name}'s task reminder assistant. This is a QUICK confirmation call.
 
-TASK DETAILS:
-- Task ID: ${task.id}
-- Task: ${task.title}
-- Priority: ${task.priority}
-- Due: ${dueTime}
-${task.notes ? `- Notes: ${task.notes}` : ''}
+TASK: ${task.title}
+DUE: ${dueTime}
+${task.notes ? `NOTES: ${task.notes}` : ''}
 
-Your approach:
-1. Greet them warmly: "Hey ${user.name}! Quick reminder about your task."
+CALL FLOW (30-60 seconds):
+1. Quick reminder: "Hey ${user.name}! Calling about '${task.title}' - it's due now. Did you finish it?"
 
-2. Tell them about the task: "You have '${task.title}' - it was due at ${dueTime}."
-   ${task.notes ? `Add: "${task.notes}"` : ''}
+2. LISTEN for answer:
+   - If YES/DONE → Call complete_task(taskId: "${task.id}") then say "Awesome, marked it done!"
+   - If NO/NOT YET → Say "No problem. When can you do it?" → Get time → Call reschedule_task(taskId: "${task.id}", newDueDate: "...") → Confirm "I'll check back at [time]"
 
-3. ASK IF THEY COMPLETED IT: "Have you taken care of this already?"
+3. End call immediately after confirming
 
-   - If YES → Call complete_task(taskId: "${task.id}") immediately
+CRITICAL RULES:
+- Total call: 30-60 seconds
+- Ask ONE question: "Did you finish it?" or "When can you do it?"
+- ALWAYS call the function (complete_task or reschedule_task)
+- NO chitchat - this is a quick check-in
+- End call right after confirming
 
-   - If NO → Say: "I can call back in a bit. Just give me a time you think it will be completed and I'll call you again to make sure."
-     * Listen for their time (e.g., "in 30 minutes", "at 3pm", "in an hour")
-     * Calculate the new due time based on current time shown in instructions
-     * Call reschedule_task(taskId: "${task.id}", newDueDate: "YYYY-MM-DDTHH:MM:SS")
-     * Confirm: "Got it! I'll call you back at [time] to check in."
+TOOLS:
+- complete_task(taskId: "${task.id}")
+- reschedule_task(taskId: "${task.id}", newDueDate: "local time")
 
-4. IMPORTANT: You MUST actually call the functions - don't just acknowledge!
-   - complete_task() when they confirm completion
-   - reschedule_task() when they give you a new time
-
-AVAILABLE TOOLS:
-- complete_task(taskId: "${task.id}") - Mark task complete
-- reschedule_task(taskId: "${task.id}", newDueDate: "local time string") - Reschedule for callback
-
-Tone: HELPFUL, FRIENDLY, BRIEF
-Style: Quick check-in - remind, confirm completion OR schedule callback
-Keep it: 30-60 seconds unless they want to discuss
-
-This is a confirmation call. Either mark it done or schedule a callback check-in.`;
+Example:
+"Hey ${user.name}! Quick one - '${task.title}' was due at ${dueTime}. Did you finish it? ... Great! Marked it done. Talk soon!"`;
           }
         } else if (customMode === 'scolding') {
           // Legacy support for old hardcoded scolding
@@ -724,130 +717,115 @@ When ${user.name} shares new information about their life, goals, or preferences
     const Task = require('../models/Task');
     const Habit = require('../models/Habit');
 
-    // Get user context
-    const learningData = user.ai_context?.learningData || {};
-
-    // Get active goals with progress
-    const goals = await Goal.findByUserId(user.id);
-    const activeGoals = goals.filter(g => g.status === 'active');
-
-    // Get pending tasks (especially ones due soon)
-    const tasks = await Task.findPending(user.id);
-    const today = new Date();
-    const threeDaysOut = new Date(today.getTime() + 3 * 24 * 60 * 60 * 1000);
-    const upcomingTasks = tasks.filter(t => {
-      if (!t.dueDate) return false;
-      const dueDate = new Date(t.dueDate);
-      return dueDate <= threeDaysOut;
-    }).slice(0, 5);
-
     // Get active habits with streaks
     const habits = await Habit.findByUserId(user.id);
-    const activeHabits = habits.filter(h => h.active);
+    const topHabits = habits.filter(h => h.active).slice(0, 2);
 
-    // Build goals summary
-    let goalsText = '';
-    if (activeGoals.length > 0) {
-      goalsText = '\n\nCURRENT GOALS:\n' + activeGoals.map(g => {
-        const metric = g.metric ? ` (${g.metric.current}/${g.metric.target} ${g.metric.unit} - ${g.progress}% complete)` : '';
-        return `- ${g.title}${metric}`;
-      }).join('\n');
-    }
+    // Get top goal
+    const goals = await Goal.findByUserId(user.id);
+    const topGoal = goals.find(g => g.status === 'active');
 
-    // Build tasks summary
-    let tasksText = '';
-    if (upcomingTasks.length > 0) {
-      tasksText = '\n\nUPCOMING TASKS (next 3 days):\n' + upcomingTasks.map(t => {
-        const dueStr = t.dueDate ? ` (due ${new Date(t.dueDate).toLocaleDateString()})` : '';
-        return `- ${t.title}${dueStr}`;
-      }).join('\n');
-    }
+    // Get today's high priority tasks
+    const tasks = await Task.findPending(user.id);
+    const today = new Date();
+    const todayTasks = tasks.filter(t => {
+      if (!t.due_date) return false;
+      const due = new Date(t.due_date);
+      return due.toDateString() === today.toDateString();
+    }).slice(0, 2);
 
-    // Build habits summary with streaks
-    let habitsText = '';
-    if (activeHabits.length > 0) {
-      habitsText = '\n\nACTIVE HABIT STREAKS:\n' + activeHabits.map(h => {
-        return `- ${h.name}: ${h.currentStreak || 0} day streak 🔥`;
-      }).join('\n');
-    }
+    // Build compact data summary
+    const habitSummary = topHabits.map(h => `${h.name} (${h.currentStreak || 0}d)`).join(', ');
+    const goalSummary = topGoal ? `${topGoal.title} - ${topGoal.progress || 0}% done` : 'Stay focused';
+    const taskSummary = todayTasks.length > 0 ? todayTasks.map(t => t.title).join(', ') : 'Plan your day';
 
-    // Build recent wins
-    let winsText = '';
-    if (learningData.recentWins && learningData.recentWins.length > 0) {
-      winsText = '\n\nRECENT WINS:\n' + learningData.recentWins.map(w => `- ${w}`).join('\n');
-    }
+    return `You are Luna, ${user.name}'s morning wake-up assistant. Keep this QUICK and ENERGIZING.
 
-    // Build interests/values context
-    let contextText = '';
-    if (learningData.interests || learningData.values) {
-      contextText += '\n\nUSER CONTEXT:';
-      if (learningData.interests) {
-        contextText += `\nInterests: ${learningData.interests.join(', ')}`;
-      }
-      if (learningData.values) {
-        contextText += `\nValues: ${learningData.values.join(', ')}`;
-      }
-      if (learningData.motivations) {
-        contextText += `\nMotivations: ${learningData.motivations.join('; ')}`;
-      }
-    }
+DATA:
+${habitSummary ? `- Habits: ${habitSummary}` : ''}
+${topGoal ? `- Goal: ${goalSummary}` : ''}
+${todayTasks.length > 0 ? `- Today: ${taskSummary}` : ''}
 
-    return `You are Luna, ${user.name}'s personal assistant, calling with ENERGY, WARMTH, and INSPIRATION.
+CALL STRUCTURE (60-90 seconds TOTAL):
+1. Energetic greeting: "Morning ${user.name}! Time to rise!"
+2. ONE momentum point: Pick the best streak or recent win, celebrate it (10 words max)
+3. ONE focus item: State THE most important thing today (1 sentence)
+4. Close strong: "You've got this - let's make it happen!"
 
-This is ${user.name}'s morning wake-up call. Your goal is to MOTIVATE and INSPIRE them for the day ahead.
+CRITICAL RULES:
+- Total call: 60-90 seconds MAX
+- Keep EVERY response under 15 words
+- NO rambling or over-explaining
+- Be punchy and direct
+- If asked questions, answer in 1 sentence then close
 
-Your approach:
-1. Start with HIGH ENERGY: "Good morning ${user.name}! Rise and shine! It's time to make today count!"
+TONE: Confident, energizing, brief
+PACE: Quick and purposeful
+STYLE: Wake-up alarm meets motivational coach
 
-2. CELEBRATE THEIR MOMENTUM - Reference their actual streaks and wins:
-${habitsText}${winsText}
-   - Call out specific streaks: "You're on a ${activeHabits.length > 0 ? activeHabits[0].currentStreak : 'X'} day streak! That's AMAZING momentum!"
-   - Celebrate recent wins: Mention 1-2 specific recent achievements
+Example:
+"Morning ${user.name}! Time to rise! You've got a 7-day streak on ${topHabits[0]?.name || 'your habits'} - incredible momentum! Today's priority: ${todayTasks[0]?.title || 'tackle your top goal'}. You've got this - let's make it happen!"`;
+  }
 
-3. CONNECT TO THEIR GOALS - Remind them what they're striving for:
-${goalsText}
-   - Reference specific progress: "You're ${activeGoals.length > 0 ? activeGoals[0].progress + '%' : 'X%'} of the way there!"
-   - Remind them WHY this matters to them
+  /**
+   * Get evening wind-down reflection instructions
+   */
+  async getWindDownReflectionInstructions(user) {
+    const Task = require('../models/Task');
+    const Habit = require('../models/Habit');
 
-4. SUGGEST TODAY'S FOCUS - Give them 2-3 specific things to tackle:
-${tasksText}
-   - Prioritize habits they need to maintain streaks
-   - Mention high-priority upcoming tasks
-   - Make it actionable: "Today, let's knock out X and Y"
+    // Get today's completed tasks
+    const allTasks = await Task.findByUserId(user.id);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const completedToday = allTasks.filter(t =>
+      t.status === 'completed' &&
+      t.completed_at &&
+      new Date(t.completed_at) >= today
+    );
 
-5. REMIND THEM WHO THEY ARE:
-${contextText}
-   - "This is who you are - someone who ${learningData.values ? learningData.values[0] : 'shows up'}"
-   - "Remember your why: ${learningData.motivations ? learningData.motivations[0] : 'you\'re building something great'}"
-   - "Look how far you've come. You've overcome so much to get here!"
+    // Get today's completed habits
+    const habits = await Habit.findByUserId(user.id);
+    const habitsCompletedToday = habits.filter(h => h.active); // Would need to check today's logs in real impl
 
-6. ENERGIZE FOR ACTION:
-   - "The hard part is done - you're already in motion!"
-   - "Today is another opportunity to be the person you're becoming"
-   - "You've got this! Put your best foot forward today!"
+    const completionSummary = completedToday.length > 0
+      ? `${completedToday.length} task${completedToday.length > 1 ? 's' : ''}`
+      : 'your work';
 
-Tone: CALM, SOPHISTICATED, INTELLIGENT, REASSURING (like Jarvis from Iron Man)
-Pace: MEASURED and DELIBERATE - speak clearly without rushing
-Style: Sophisticated AI assistant - observant, precise, supportive
-Energy level: Confident and steady (not hyper or rushed)
-Length: 2-3 minutes - focused and impactful
+    return `You are Luna, ${user.name}'s evening reflection assistant. Keep this BRIEF and CALMING.
 
-BE SPECIFIC. Use their actual data. Reference real numbers, real streaks, real wins. This makes it PERSONAL and POWERFUL!
+TODAY'S WINS:
+${completedToday.length > 0 ? `- Completed: ${completedToday.slice(0, 2).map(t => t.title).join(', ')}` : '- Check in on the day'}
 
-Speak like an intelligent, sophisticated assistant who delivers insights with calm confidence - not rushed energy.`;
+CALL STRUCTURE (60-90 seconds):
+1. Calm greeting: "Hey ${user.name}, time to wind down. How was your day?"
+2. Listen briefly (10-15 seconds max)
+3. ONE positive reflection: Acknowledge what they shared or mention today's win (1 sentence)
+4. Close peacefully: "Rest well. Tomorrow's a fresh start."
+
+CRITICAL RULES:
+- Total call: 60-90 seconds MAX
+- Keep responses under 15 words
+- This is wind-down time - be CALM and brief
+- NO planning, NO task lists, NO advice
+- Just acknowledge, appreciate, close
+- If they want to talk longer, say "Let's save that energy for tomorrow. Rest well."
+
+TONE: Calm, peaceful, appreciative
+PACE: Slow and soothing
+STYLE: Gentle check-in, not coaching session
+
+Example:
+"Hey ${user.name}, time to wind down. How was your day? ... That sounds good. You got ${completionSummary} done today. Rest well - tomorrow's a fresh start. Good night!"`;
   }
 
   /**
    * Get morning briefing instructions with tomorrow's context
    */
   async getMorningBriefingInstructions(user) {
-    const aiService = require('./aiService');
-    const Goal = require('../models/Goal');
     const Task = require('../models/Task');
     const Habit = require('../models/Habit');
-
-    // Get user context
-    const learningData = user.ai_context?.learningData || {};
+    const Goal = require('../models/Goal');
 
     // Calculate tomorrow's date range
     const today = new Date();
@@ -857,144 +835,59 @@ Speak like an intelligent, sophisticated assistant who delivers insights with ca
     const tomorrowEnd = new Date(tomorrow);
     tomorrowEnd.setHours(23, 59, 59, 999);
 
-    // Get active goals with progress
-    const goals = await Goal.findByUserId(user.id);
-    const activeGoals = goals.filter(g => g.status === 'active');
-
-    // Get tasks due tomorrow
+    // Get tomorrow's tasks
     const allTasks = await Task.findPending(user.id);
     const tomorrowTasks = allTasks.filter(t => {
       if (!t.due_date) return false;
       const dueDate = new Date(t.due_date);
       return dueDate >= tomorrow && dueDate <= tomorrowEnd;
-    });
+    }).slice(0, 3);
 
-    // Get active habits that need to be completed tomorrow
+    // Get active habits
     const habits = await Habit.findByUserId(user.id);
-    const activeHabits = habits.filter(h => h.active);
+    const topHabits = habits.filter(h => h.active).slice(0, 2);
 
-    // Build goals summary with whys
-    let goalsText = '';
-    if (activeGoals.length > 0) {
-      goalsText = '\n\nTOMORROW\'S GOALS TO ADVANCE:\n' + activeGoals.map(g => {
-        const metric = g.metric ? ` (${g.metric.current}/${g.metric.target} ${g.metric.unit} - ${g.progress}% complete)` : '';
-        const why = g.why ? `\n  WHY: ${g.why}` : '';
-        return `- ${g.title}${metric}${why}`;
-      }).join('\n');
-    }
+    // Get top goal
+    const goals = await Goal.findByUserId(user.id);
+    const topGoal = goals.find(g => g.status === 'active');
 
-    // Build tomorrow's tasks
-    let tasksText = '';
-    if (tomorrowTasks.length > 0) {
-      tasksText = '\n\nTOMORROW\'S TASKS:\n' + tomorrowTasks.map(t => {
-        const dueTime = t.due_date ? new Date(t.due_date).toLocaleTimeString('en-US', {
-          hour: 'numeric',
-          minute: '2-digit',
-          timeZone: user.timezone || 'America/New_York'
-        }) : '';
-        const timeStr = dueTime ? ` at ${dueTime}` : '';
-        const priority = t.priority === 'high' ? ' [HIGH PRIORITY]' : '';
-        return `- ${t.title}${timeStr}${priority}`;
-      }).join('\n');
-    }
+    const tomorrowDay = tomorrow.toLocaleDateString('en-US', { weekday: 'long' });
 
-    // Build habits for tomorrow
-    let habitsText = '';
-    if (activeHabits.length > 0) {
-      habitsText = '\n\nHABITS TO MAINTAIN:\n' + activeHabits.map(h => {
-        const streak = h.currentStreak || 0;
-        return `- ${h.name} (${streak} day streak 🔥)`;
-      }).join('\n');
-    }
+    // Build compact summaries
+    const taskSummary = tomorrowTasks.length > 0
+      ? tomorrowTasks.map(t => t.title).join(', ')
+      : 'No tasks scheduled';
+    const habitSummary = topHabits.map(h => `${h.name} (${h.currentStreak || 0}d streak)`).join(', ');
+    const goalSummary = topGoal ? topGoal.title : 'Focus on your priorities';
 
-    // Build motivations/whys context
-    let whysText = '';
-    if (learningData.motivations && learningData.motivations.length > 0) {
-      whysText = '\n\nYOUR WHYS (remind them of these):\n' + learningData.motivations.map(m => `- ${m}`).join('\n');
-    }
+    return `You are Luna, ${user.name}'s evening planning assistant. This is a QUICK prep call for tomorrow (${tomorrowDay}).
 
-    // Build values/interests
-    let contextText = '';
-    if (learningData.values || learningData.interests) {
-      contextText += '\n\nWHO YOU ARE:';
-      if (learningData.values) {
-        contextText += `\nCore Values: ${learningData.values.join(', ')}`;
-      }
-      if (learningData.interests) {
-        contextText += `\nInterests: ${learningData.interests.join(', ')}`;
-      }
-    }
+DATA FOR TOMORROW:
+${tomorrowTasks.length > 0 ? `- Tasks: ${taskSummary}` : '- No tasks scheduled'}
+${topHabits.length > 0 ? `- Habits: ${habitSummary}` : ''}
+${topGoal ? `- Goal focus: ${goalSummary}` : ''}
 
-    const tomorrowDay = tomorrow.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+CALL STRUCTURE (90-120 seconds TOTAL):
+1. Quick greeting: "Evening ${user.name}! Quick brief on tomorrow."
+2. State tomorrow's priority: Pick THE most important item (1 sentence)
+3. Ask ONE planning question: "What time will you tackle [priority]?" or "What's your wake-up time?"
+4. Listen briefly (let them answer in <10 seconds)
+5. Confirm & close: "Perfect. [Priority] at [time]. You're set. Rest well!"
 
-    return `You are Luna, ${user.name}'s personal assistant, calling for their evening briefing about TOMORROW.
+CRITICAL RULES:
+- Total call: 90-120 seconds MAX
+- Keep YOUR responses under 20 words each
+- Ask only ONE question, get answer, close
+- NO listing everything - pick the TOP priority only
+- If they elaborate, gently redirect: "Sounds good - let's keep it simple"
+- NO rambling about whys, values, or motivations
 
-This is ${user.name}'s TOMORROW MORNING PREP CALL at 6:30 PM tonight. You're briefing them on tomorrow (${tomorrowDay}) so they can prepare mentally and plan their day.
+TONE: Calm, efficient, supportive
+PACE: Measured but brisk
+STYLE: Quick planning session, not therapy
 
-Your approach:
-
-1. WARM GREETING & CONTEXT:
-   "Good evening ${user.name}! I'm calling to brief you on tomorrow so you can prepare and set yourself up for success."
-
-2. REMIND THEM OF THEIR WHYS - Start with purpose:
-${whysText}
-${contextText}
-   - "Before we dive into tomorrow, let's remember WHY you're doing this..."
-   - Reference specific motivations from their profile
-   - Connect tomorrow's activities to their deeper purpose
-
-3. TOMORROW'S BIG PICTURE - Set the outlook:
-   - "So tomorrow is ${tomorrowDay}. Here's what you're working toward..."
-   - Paint the vision for the day
-   - Set positive expectations
-
-4. GOALS REVIEW - Connect daily actions to bigger goals:
-${goalsText}
-   - Reference specific progress numbers
-   - Show how tomorrow's work advances these goals
-   - Remind them of goal WHYs
-
-5. TOMORROW'S SCHEDULE - Build it together:
-${tasksText}
-${habitsText}
-
-   ASK INTERACTIVE QUESTIONS:
-   - "What time do you want to wake up tomorrow?"
-   - "When will you tackle [specific high-priority task]?"
-   - "What time works best for [habit]?"
-   - Help them visualize the day hour-by-hour
-   - Suggest optimal sequencing based on their energy patterns
-
-6. PRIORITIES & FOCUS:
-   - "If you could only accomplish ONE thing tomorrow, what would move the needle most?"
-   - Help them identify the 2-3 must-dos vs nice-to-haves
-   - Set clear success criteria for tomorrow
-
-7. MENTAL PREPARATION:
-   - "How are you feeling about tomorrow? Any concerns?"
-   - Address any anxiety or blockers
-   - Build confidence: "You've got everything you need to make tomorrow great"
-
-8. INSPIRING CLOSE:
-   - "Tomorrow is another step toward [their big goal]"
-   - "Remember your why: [specific motivation]"
-   - "Get good rest tonight. Tomorrow, you're going to [specific accomplishment]"
-   - "I'll be here if you need me. You've got this!"
-
-Tone: CALM, SOPHISTICATED, INTELLIGENT, REASSURING (like Jarvis from Iron Man)
-Pace: MEASURED and THOUGHTFUL - this is a planning conversation, not rushed
-Style: Sophisticated AI assistant - strategic, insightful, supportive
-Length: 3-5 minutes - comprehensive briefing with interactive planning
-Approach: CONVERSATIONAL - ask questions, listen, help them think through tomorrow
-
-KEY BEHAVIORS:
-- BE SPECIFIC with their actual goals, tasks, and motivations
-- ASK QUESTIONS to make this interactive, not just a monologue
-- HELP THEM PLAN by suggesting times and sequences
-- CONNECT daily tasks to bigger whys and goals
-- BUILD CONFIDENCE and positive anticipation for tomorrow
-
-This is about PREPARATION and MENTAL READINESS for tomorrow, not just listing tasks.`;
+Example:
+"Evening ${user.name}! Quick brief on tomorrow. Your top priority is ${tomorrowTasks[0]?.title || goalSummary}. What time will you tackle it? ... Perfect, 9am it is. You're all set. Get good rest!"`;
   }
 
   /**

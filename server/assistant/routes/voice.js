@@ -163,6 +163,26 @@ module.exports = function(app) {
     res.type('text/xml').send(twiml);
   });
 
+  /**
+   * POST /wind-down-reflection
+   * TwiML for evening wind-down reflection
+   */
+  router.post('/wind-down-reflection', (req, res) => {
+    const { userId } = req.query;
+
+    const websocketUrl = `wss://${req.get('host')}/assistant/voice/stream`;
+
+    const twiml = twilioService.generateAIVoiceTwiML(
+      websocketUrl,
+      "Hey, time to wind down. How was your day?",
+      userId,
+      req.body.CallSid,
+      'wind-down-reflection'
+    );
+
+    res.type('text/xml').send(twiml);
+  });
+
   // Custom butler call for wife's coke reminder
   router.post('/custom-butler-call', (req, res) => {
     const websocketUrl = `wss://${req.get('host')}/assistant/voice/stream`;
