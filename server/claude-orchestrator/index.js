@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { choreTrackerServer } from './mcp-servers/choreTracker.js';
 
 console.log('Claude Orchestrator starting...');
 console.log('Environment:', process.env.NODE_ENV);
@@ -13,4 +14,5 @@ if (missing.length > 0) {
 }
 
 console.log('✓ Environment variables loaded');
+console.log('✓ Chore Tracker MCP server loaded');
 console.log('✓ Ready to start orchestration service');
