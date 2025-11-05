@@ -16,7 +16,56 @@ export const choreTrackerServer = createSdkMcpServer({
   name: 'chore-tracker',
   version: '1.0.0',
   tools: [
-    // Tools will be added in next tasks
+    tool(
+      'schedule_call',
+      'Schedule a future call for user intervention',
+      {
+        userId: z.string().uuid().describe('User UUID'),
+        callType: z.enum([
+          'scolding',
+          'motivational-wakeup',
+          'task-reminder',
+          'morning-briefing',
+          'wind-down-reflection'
+        ]).describe('Type of call to schedule'),
+        scheduledFor: z.string().datetime().describe('ISO 8601 datetime when call should occur'),
+        customInstructions: z.string().optional().describe('Custom instructions for the call agent')
+      },
+      async (args) => {
+        try {
+          const { data, error } = await supabase
+            .from('scheduled_calls')
+            .insert({
+              user_id: args.userId,
+              call_type: args.callType,
+              scheduled_for: args.scheduledFor,
+              custom_instructions: args.customInstructions,
+              created_by: 'sdk-agent',
+              status: 'pending'
+            })
+            .select()
+            .single();
+
+          if (error) {
+            throw new Error(`Database error: ${error.message}`);
+          }
+
+          return {
+            content: [{
+              type: 'text',
+              text: `✓ Scheduled ${args.callType} call for ${args.scheduledFor}\nCall ID: ${data.id}\nStatus: ${data.status}`
+            }]
+          };
+        } catch (error) {
+          return {
+            content: [{
+              type: 'text',
+              text: `✗ Failed to schedule call: ${error.message}`
+            }]
+          };
+        }
+      }
+    )
   ]
 });
 
