@@ -65,6 +65,93 @@ export const choreTrackerServer = createSdkMcpServer({
           };
         }
       }
+    ),
+    tool(
+      'update_user_insights',
+      'Update learned patterns and insights about user',
+      {
+        userId: z.string().uuid().describe('User UUID'),
+        insights: z.object({
+          patterns: z.array(z.string()).optional().describe('Behavioral patterns detected'),
+          preferences: z.array(z.string()).optional().describe('User preferences learned'),
+          goals: z.array(z.string()).optional().describe('User goals identified'),
+          behaviors: z.record(z.any()).optional().describe('Specific behavior data')
+        }).describe('Insights to merge with existing user data')
+      },
+      async (args) => {
+        try {
+          // Fetch current insights
+          const { data: user, error: fetchError } = await supabase
+            .from('users')
+            .select('insights')
+            .eq('id', args.userId)
+            .single();
+
+          if (fetchError) {
+            throw new Error(`Failed to fetch user: ${fetchError.message}`);
+          }
+
+          // Merge new insights with existing
+          const currentInsights = user.insights || {
+            patterns: [],
+            preferences: [],
+            goals: [],
+            behaviors: {}
+          };
+
+          const updatedInsights = {
+            patterns: [...new Set([
+              ...(currentInsights.patterns || []),
+              ...(args.insights.patterns || [])
+            ])],
+            preferences: [...new Set([
+              ...(currentInsights.preferences || []),
+              ...(args.insights.preferences || [])
+            ])],
+            goals: [...new Set([
+              ...(currentInsights.goals || []),
+              ...(args.insights.goals || [])
+            ])],
+            behaviors: {
+              ...(currentInsights.behaviors || {}),
+              ...(args.insights.behaviors || {})
+            },
+            lastUpdated: new Date().toISOString()
+          };
+
+          // Update user record
+          const { error: updateError } = await supabase
+            .from('users')
+            .update({ insights: updatedInsights })
+            .eq('id', args.userId);
+
+          if (updateError) {
+            throw new Error(`Failed to update insights: ${updateError.message}`);
+          }
+
+          const summary = [
+            `✓ User insights updated`,
+            `Patterns: ${updatedInsights.patterns.length} total`,
+            `Preferences: ${updatedInsights.preferences.length} total`,
+            `Goals: ${updatedInsights.goals.length} total`,
+            `Last updated: ${updatedInsights.lastUpdated}`
+          ].join('\n');
+
+          return {
+            content: [{
+              type: 'text',
+              text: summary
+            }]
+          };
+        } catch (error) {
+          return {
+            content: [{
+              type: 'text',
+              text: `✗ Failed to update insights: ${error.message}`
+            }]
+          };
+        }
+      }
     )
   ]
 });
