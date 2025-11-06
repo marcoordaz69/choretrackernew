@@ -309,7 +309,7 @@ Delivery: Speak clearly with refined pronunciation, slight British accent in cad
 
         // Save interaction
         const duration = Math.floor((Date.now() - session.startTime) / 1000);
-        await Interaction.create({
+        const interaction = await Interaction.create({
           userId,
           type: 'voice_inbound',
           direction: 'inbound',
@@ -321,6 +321,14 @@ Delivery: Speak clearly with refined pronunciation, slight British accent in cad
             twilioSid: callSid
           }
         });
+
+        // Trigger Claude SDK orchestrator for autonomous analysis (async, non-blocking)
+        if (session.transcript && interaction) {
+          console.log('[ORCHESTRATOR] Triggering Claude SDK analysis for interaction:', interaction.id);
+          this.triggerClaudeSDKAnalysis(interaction).catch(err => {
+            console.error('[ORCHESTRATOR] Failed to trigger analysis:', err.message);
+          });
+        }
 
         this.activeSessions.delete(callSid);
       });
@@ -921,6 +929,54 @@ Example:
 
     await twilioService.makeCall(user.phone, webhookUrl);
     console.log(`Initiated reflection call to ${user.name}`);
+  }
+
+  /**
+   * Trigger Claude SDK orchestrator to analyze call transcript
+   * Converts MongoDB interaction model to PostgreSQL format and invokes processor
+   */
+  async triggerClaudeSDKAnalysis(interaction) {
+    try {
+      // Import Claude orchestrator components
+      const path = require('path');
+      // __dirname is /home/tradedad/choretrackernew/server/assistant/services
+      // We need to go up 3 levels to reach /home/tradedad/choretrackernew
+      const orchestratorPath = path.join(__dirname, '../../../.worktrees/claude-sdk-orchestration/server/claude-orchestrator');
+
+      // Lazy load to avoid startup dependencies
+      const { processCallCompletion } = await import(`${orchestratorPath}/processors/callCompletionProcessor.js`);
+      const { choreTrackerServer } = await import(`${orchestratorPath}/mcp-servers/choreTracker.js`);
+
+      // Convert MongoDB interaction model to PostgreSQL format expected by processor
+      const pgInteraction = {
+        id: interaction.id || interaction._id.toString(),
+        user_id: interaction.userId,
+        call_type: interaction.type, // 'voice_inbound' etc.
+        transcript: interaction.content?.transcript || '',
+        duration_seconds: interaction.metadata?.duration || 0,
+        created_at: interaction.timestamp || new Date()
+      };
+
+      console.log('[ORCHESTRATOR] Prepared interaction for Claude SDK:', {
+        id: pgInteraction.id,
+        user_id: pgInteraction.user_id,
+        call_type: pgInteraction.call_type,
+        transcript_length: pgInteraction.transcript.length
+      });
+
+      // Configure MCP servers
+      const mcpServers = [choreTrackerServer];
+
+      // Invoke Claude SDK processor (async, non-blocking)
+      const result = await processCallCompletion(pgInteraction, mcpServers);
+
+      console.log('[ORCHESTRATOR] Analysis complete:', result?.substring(0, 100));
+      return result;
+
+    } catch (error) {
+      console.error('[ORCHESTRATOR] Error triggering Claude SDK analysis:', error);
+      throw error;
+    }
   }
 }
 
