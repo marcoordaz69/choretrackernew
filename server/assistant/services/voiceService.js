@@ -1,6 +1,13 @@
 const WebSocket = require('ws');
 const User = require('../models/User');
 const Interaction = require('../models/Interaction');
+const { createClient } = require('@supabase/supabase-js');
+
+// Initialize Supabase client for saving voice interactions
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_KEY
+);
 
 class VoiceService {
   constructor() {
@@ -307,20 +314,26 @@ Delivery: Speak clearly with refined pronunciation, slight British accent in cad
 
         openAIWs.close();
 
-        // Save interaction
+        // Save interaction to Supabase (not MongoDB)
         const duration = Math.floor((Date.now() - session.startTime) / 1000);
-        const interaction = await Interaction.create({
-          userId,
-          type: 'voice_inbound',
-          direction: 'inbound',
-          content: {
-            transcript: session.transcript
-          },
-          metadata: {
-            duration,
-            twilioSid: callSid
-          }
-        });
+
+        const { data: interaction, error: insertError } = await supabase
+          .from('interactions')
+          .insert({
+            user_id: userId,
+            call_type: customMode || 'voice_inbound',
+            transcript: session.transcript,
+            duration_seconds: duration,
+            completed_at: new Date().toISOString()
+          })
+          .select()
+          .single();
+
+        if (insertError) {
+          console.error('[VOICESERVICE] Failed to save interaction to Supabase:', insertError);
+        } else {
+          console.log('[VOICESERVICE] ✓ Interaction saved to Supabase:', interaction.id);
+        }
 
         // Trigger Claude SDK orchestrator for autonomous analysis (async, non-blocking)
         if (session.transcript && interaction) {
@@ -933,7 +946,7 @@ Example:
 
   /**
    * Trigger Claude SDK orchestrator to analyze call transcript
-   * Converts MongoDB interaction model to PostgreSQL format and invokes processor
+   * Interaction is already in Supabase PostgreSQL format
    */
   async triggerClaudeSDKAnalysis(interaction) {
     try {
@@ -947,28 +960,18 @@ Example:
       const { processCallCompletion } = await import(`${orchestratorPath}/processors/callCompletionProcessor.js`);
       const { choreTrackerServer } = await import(`${orchestratorPath}/mcp-servers/choreTracker.js`);
 
-      // Convert MongoDB interaction model to PostgreSQL format expected by processor
-      const pgInteraction = {
-        id: interaction.id || interaction._id.toString(),
-        user_id: interaction.userId,
-        call_type: interaction.type, // 'voice_inbound' etc.
-        transcript: interaction.content?.transcript || '',
-        duration_seconds: interaction.metadata?.duration || 0,
-        created_at: interaction.timestamp || new Date()
-      };
-
       console.log('[ORCHESTRATOR] Prepared interaction for Claude SDK:', {
-        id: pgInteraction.id,
-        user_id: pgInteraction.user_id,
-        call_type: pgInteraction.call_type,
-        transcript_length: pgInteraction.transcript.length
+        id: interaction.id,
+        user_id: interaction.user_id,
+        call_type: interaction.call_type,
+        transcript_length: interaction.transcript?.length || 0
       });
 
       // Configure MCP servers
       const mcpServers = [choreTrackerServer];
 
       // Invoke Claude SDK processor (async, non-blocking)
-      const result = await processCallCompletion(pgInteraction, mcpServers);
+      const result = await processCallCompletion(interaction, mcpServers);
 
       console.log('[ORCHESTRATOR] Analysis complete:', result?.substring(0, 100));
       return result;
