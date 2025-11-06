@@ -2,6 +2,13 @@ const cron = require('node-cron');
 const User = require('../models/User');
 const twilioService = require('./twilioService');
 const aiService = require('./aiService');
+const { createClient } = require('@supabase/supabase-js');
+
+// Initialize Supabase client for orchestrator scheduled calls
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_KEY
+);
 
 class Scheduler {
   constructor() {
@@ -49,6 +56,13 @@ class Scheduler {
       await this.resetMessageCounts();
     });
     this.jobs.push(resetJob);
+
+    // Orchestrator scheduled calls - runs every minute to check for Claude-scheduled calls
+    const orchestratorCallsJob = cron.schedule('* * * * *', async () => {
+      await this.processOrchestratorScheduledCalls();
+    });
+    this.jobs.push(orchestratorCallsJob);
+    console.log('✅ Orchestrator scheduled calls processor initialized - will check Supabase every minute');
 
     console.log('All scheduled jobs started');
   }
@@ -425,6 +439,138 @@ class Scheduler {
       console.log(`Reset message counts for ${usersToReset.length} users`);
     } catch (error) {
       console.error('Error resetting message counts:', error);
+    }
+  }
+
+  /**
+   * Process Claude orchestrator scheduled calls from Supabase
+   * Reads from scheduled_calls table and makes voice calls via Twilio
+   */
+  async processOrchestratorScheduledCalls() {
+    try {
+      const now = new Date();
+
+      // Query Supabase for pending calls that are due
+      const { data: scheduledCalls, error } = await supabase
+        .from('scheduled_calls')
+        .select('*')
+        .eq('status', 'pending')
+        .lte('scheduled_for', now.toISOString())
+        .order('scheduled_for', { ascending: true });
+
+      if (error) {
+        console.error('Error fetching orchestrator scheduled calls:', error);
+        return;
+      }
+
+      if (!scheduledCalls || scheduledCalls.length === 0) {
+        return; // No calls due
+      }
+
+      console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+      console.log(`🤖 ORCHESTRATOR: ${scheduledCalls.length} scheduled call(s) due`);
+      console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+
+      for (const call of scheduledCalls) {
+        try {
+          console.log(`\n📞 Executing orchestrator call:`);
+          console.log(`   Call ID: ${call.id}`);
+          console.log(`   User ID: ${call.user_id}`);
+          console.log(`   Type: ${call.call_type}`);
+          console.log(`   Scheduled: ${call.scheduled_for}`);
+          console.log(`   Custom Instructions: ${call.custom_instructions || 'None'}`);
+
+          // Get user phone from MongoDB (still need this for Twilio)
+          const user = await User.findById(call.user_id);
+          if (!user) {
+            console.error(`   ✗ User not found: ${call.user_id}`);
+            await supabase
+              .from('scheduled_calls')
+              .update({
+                status: 'failed',
+                completed_at: now.toISOString(),
+                updated_at: now.toISOString()
+              })
+              .eq('id', call.id);
+            continue;
+          }
+
+          console.log(`   User: ${user.name} (${user.phone})`);
+
+          // Build webhook URL based on call type
+          const domain = process.env.DOMAIN || 'https://choretrackernew-production.up.railway.app';
+          const baseUrl = domain.startsWith('http') ? domain : `https://${domain}`;
+
+          let webhookUrl;
+          switch (call.call_type) {
+            case 'motivational-wakeup':
+              webhookUrl = `${baseUrl}/assistant/voice/motivational-wakeup?userId=${user.id}`;
+              break;
+            case 'wind-down-reflection':
+              webhookUrl = `${baseUrl}/assistant/voice/wind-down-reflection?userId=${user.id}`;
+              break;
+            case 'morning-briefing':
+              webhookUrl = `${baseUrl}/assistant/voice/morning-briefing?userId=${user.id}`;
+              break;
+            case 'task-reminder':
+              // Custom instructions should contain taskId
+              const taskId = call.custom_instructions;
+              webhookUrl = `${baseUrl}/assistant/voice/task-reminder?userId=${user.id}&taskId=${taskId}`;
+              break;
+            case 'scolding':
+              // Custom instructions should contain topic (e.g., "laundry", "gym")
+              const topic = call.custom_instructions || 'general';
+              webhookUrl = `${baseUrl}/assistant/voice/scolding?userId=${user.id}&topic=${topic}`;
+              break;
+            default:
+              console.error(`   ✗ Unknown call type: ${call.call_type}`);
+              await supabase
+                .from('scheduled_calls')
+                .update({
+                  status: 'failed',
+                  completed_at: now.toISOString(),
+                  updated_at: now.toISOString()
+                })
+                .eq('id', call.id);
+              continue;
+          }
+
+          // Make the call
+          await twilioService.makeCall(user.phone, webhookUrl);
+
+          console.log(`   ✓ Call initiated successfully`);
+
+          // Mark as completed
+          await supabase
+            .from('scheduled_calls')
+            .update({
+              status: 'completed',
+              completed_at: now.toISOString(),
+              updated_at: now.toISOString()
+            })
+            .eq('id', call.id);
+
+          console.log(`   ✓ Status updated to completed`);
+
+        } catch (callError) {
+          console.error(`   ✗ Error executing call ${call.id}:`, callError.message);
+
+          // Mark as failed
+          await supabase
+            .from('scheduled_calls')
+            .update({
+              status: 'failed',
+              completed_at: now.toISOString(),
+              updated_at: now.toISOString()
+            })
+            .eq('id', call.id);
+        }
+      }
+
+      console.log(`\n✓ Orchestrator scheduled calls processing complete\n`);
+
+    } catch (error) {
+      console.error('Error in processOrchestratorScheduledCalls:', error);
     }
   }
 }
