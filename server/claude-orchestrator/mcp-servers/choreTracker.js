@@ -152,6 +152,69 @@ export const choreTrackerServer = createSdkMcpServer({
           };
         }
       }
+    ),
+    tool(
+      'create_briefed_call',
+      'Schedule a voice call with comprehensive briefing for the voice agent',
+      {
+        userId: z.string().uuid().describe('UUID of the user to call'),
+        callType: z.enum([
+          'scolding',
+          'motivational-wakeup',
+          'task-reminder',
+          'morning-briefing',
+          'wind-down-reflection'
+        ]).describe('Type of call to schedule'),
+        scheduledFor: z.string().datetime().describe('ISO 8601 datetime when call should occur'),
+        briefing: z.object({
+          trigger_reason: z.string().describe('Why this call was scheduled'),
+          detected_patterns: z.array(z.string()).describe('Behavioral patterns observed that led to scheduling'),
+          conversation_goals: z.array(z.string()).describe('What the voice agent should accomplish in this call'),
+          recent_context: z.string().describe('Relevant recent user state or events')
+        }).describe('Strategic context for the voice agent')
+      },
+      async (args) => {
+        try {
+          const { userId, callType, scheduledFor, briefing } = args;
+
+          const { data, error } = await supabase
+            .from('call_sessions')
+            .insert({
+              user_id: userId,
+              direction: 'outbound',
+              call_type: callType,
+              scheduled_for: scheduledFor,
+              scheduled_by: 'claude-sdk',
+              status: 'scheduled',
+              briefing: briefing
+            })
+            .select()
+            .single();
+
+          if (error) {
+            console.error('Error creating briefed call:', error);
+            throw new Error(`Failed to create call session: ${error.message}`);
+          }
+
+          console.log(`✓ Call session created: ${data.id} (${callType} at ${scheduledFor})`);
+          console.log(`  Trigger: ${briefing.trigger_reason}`);
+
+          return {
+            content: [{
+              type: 'text',
+              text: `Call scheduled successfully!\n\nType: ${callType}\nScheduled for: ${scheduledFor}\nSession ID: ${data.id}\n\nBriefing:\n- Trigger: ${briefing.trigger_reason}\n- Patterns: ${briefing.detected_patterns.join(', ')}\n- Goals: ${briefing.conversation_goals.join(', ')}`
+            }]
+          };
+        } catch (error) {
+          console.error('Error in create_briefed_call:', error);
+          return {
+            content: [{
+              type: 'text',
+              text: `✗ Failed to schedule call: ${error.message}`
+            }]
+          };
+        }
+      }
     )
   ]
 });
