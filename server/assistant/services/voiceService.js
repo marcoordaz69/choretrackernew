@@ -32,7 +32,10 @@ class VoiceService {
 
       // Load briefing from call_sessions if sessionId provided
       let briefing = null;
+      console.log(`[BRIEFING DEBUG] sessionId value: ${JSON.stringify(sessionId)} (type: ${typeof sessionId})`);
+
       if (sessionId) {
+        console.log(`[BRIEFING] Attempting to load briefing for session: ${sessionId}`);
         try {
           const { data: callSession, error } = await supabase
             .from('call_sessions')
@@ -40,16 +43,22 @@ class VoiceService {
             .eq('id', sessionId)
             .single();
 
+          console.log(`[BRIEFING] Query result - data exists: ${!!callSession}, error: ${!!error}`);
           if (error) {
-            console.error(`[BRIEFING] Error loading session ${sessionId}:`, error);
+            console.error(`[BRIEFING] ✗ Error loading session ${sessionId}:`, error);
           } else if (callSession?.briefing) {
             briefing = callSession.briefing;
             console.log(`[BRIEFING] ✓ Loaded briefing for session ${sessionId}`);
             console.log(`[BRIEFING]   Trigger: ${briefing.trigger_reason}`);
+            console.log(`[BRIEFING]   Goals: ${briefing.conversation_goals?.join(', ')}`);
+          } else {
+            console.log(`[BRIEFING] ✗ Session ${sessionId} found but briefing is NULL`);
           }
         } catch (err) {
           console.error(`[BRIEFING] Exception loading briefing:`, err);
         }
+      } else {
+        console.log(`[BRIEFING] ✗ No sessionId provided, skipping briefing load`);
       }
 
       // Create OpenAI Realtime API WebSocket connection (GA)
@@ -264,6 +273,9 @@ Delivery: Speak clearly with refined pronunciation, slight British accent in cad
         }
 
         // Inject briefing context if available
+        console.log(`[BRIEFING INJECTION] Checking if briefing should be injected...`);
+        console.log(`[BRIEFING INJECTION] session.briefing exists: ${!!session.briefing}`);
+
         if (session.briefing) {
           const briefingContext = `
 
@@ -288,6 +300,10 @@ Use this context to have a focused, personalized conversation. Reference the pat
 
           instructions += briefingContext;
           console.log('[BRIEFING] ✓ Injected briefing into system prompt');
+          console.log('[BRIEFING]   Instructions length before injection:', instructions.length - briefingContext.length);
+          console.log('[BRIEFING]   Instructions length after injection:', instructions.length);
+        } else {
+          console.log('[BRIEFING] ✗ No briefing to inject (session.briefing is null/undefined)');
         }
 
         const sessionConfig = {

@@ -41,6 +41,7 @@ module.exports = function(app) {
           const sessionId = customParams.sessionId;
 
           console.log('Extracted parameters:', { userId, callSid, streamSid, customMode, sessionId });
+          console.log('[PARAM DEBUG] sessionId extracted from Twilio:', JSON.stringify(sessionId), 'type:', typeof sessionId);
 
           if (!userId || !callSid || !streamSid) {
             console.error('Missing userId, callSid, or streamSid in start message');
