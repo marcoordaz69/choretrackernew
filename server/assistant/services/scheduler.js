@@ -512,7 +512,7 @@ class Scheduler {
               webhookUrl = `${baseUrl}/assistant/voice/motivational-wakeup?sessionId=${session.id}`;
               break;
             case 'scolding':
-              webhookUrl = `${baseUrl}/assistant/voice/scolding?sessionId=${session.id}`;
+              webhookUrl = `${baseUrl}/assistant/voice/custom-scolding?sessionId=${session.id}`;
               break;
             case 'morning-briefing':
               webhookUrl = `${baseUrl}/assistant/voice/morning-briefing?sessionId=${session.id}`;
@@ -521,7 +521,7 @@ class Scheduler {
               webhookUrl = `${baseUrl}/assistant/voice/task-reminder?sessionId=${session.id}`;
               break;
             case 'wind-down-reflection':
-              webhookUrl = `${baseUrl}/assistant/voice/wind-down?sessionId=${session.id}`;
+              webhookUrl = `${baseUrl}/assistant/voice/wind-down-reflection?sessionId=${session.id}`;
               break;
             default:
               console.error(`   ✗ Unknown call type: ${session.call_type}`);
