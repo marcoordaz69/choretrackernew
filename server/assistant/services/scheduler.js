@@ -449,6 +449,7 @@ class Scheduler {
   async processOrchestratorScheduledCalls() {
     try {
       const now = new Date();
+      console.log(`[SCHEDULED CALLS] Checking for orchestrator-scheduled calls at ${now.toISOString()}`);
 
       // Query call_sessions instead of scheduled_calls
       const { data: sessions, error } = await supabase
@@ -460,9 +461,11 @@ class Scheduler {
         .order('scheduled_for', { ascending: true });
 
       if (error) {
-        console.error('Error querying call_sessions:', error);
+        console.error('[SCHEDULED CALLS] ✗ Error querying call_sessions:', error);
         return;
       }
+
+      console.log(`[SCHEDULED CALLS] Found ${sessions?.length || 0} scheduled calls`);
 
       if (!sessions || sessions.length === 0) {
         return;
