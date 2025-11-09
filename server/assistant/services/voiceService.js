@@ -19,7 +19,7 @@ class VoiceService {
    * Handle WebSocket connection for voice call
    * Connects Twilio Media Stream <-> OpenAI Realtime API
    */
-  async handleVoiceStream(ws, userId, callSid, streamSid, customMode = null) {
+  async handleVoiceStream(ws, userId, callSid, streamSid, customMode = null, sessionId = null) {
     try {
       const user = await User.findById(userId);
       if (!user) {
@@ -28,7 +28,29 @@ class VoiceService {
         return;
       }
 
-      console.log(`Voice stream started for ${user.name} (${callSid})${customMode ? ` [${customMode} mode]` : ''}`);
+      console.log(`Voice stream started for ${user.name} (${callSid})${customMode ? ` [${customMode} mode]` : ''}${sessionId ? ` [session: ${sessionId}]` : ''}`);
+
+      // Load briefing from call_sessions if sessionId provided
+      let briefing = null;
+      if (sessionId) {
+        try {
+          const { data: callSession, error } = await supabase
+            .from('call_sessions')
+            .select('briefing')
+            .eq('id', sessionId)
+            .single();
+
+          if (error) {
+            console.error(`[BRIEFING] Error loading session ${sessionId}:`, error);
+          } else if (callSession?.briefing) {
+            briefing = callSession.briefing;
+            console.log(`[BRIEFING] ✓ Loaded briefing for session ${sessionId}`);
+            console.log(`[BRIEFING]   Trigger: ${briefing.trigger_reason}`);
+          }
+        } catch (err) {
+          console.error(`[BRIEFING] Exception loading briefing:`, err);
+        }
+      }
 
       // Create OpenAI Realtime API WebSocket connection (GA)
       const openAIWs = new WebSocket(
@@ -47,6 +69,8 @@ class VoiceService {
         userId,
         callSid,
         streamSid: streamSid,  // ← Set from parameter, not null!
+        sessionId: sessionId,  // NEW: Store call session ID
+        briefing: briefing,  // NEW: Store briefing for later use
         transcript: '',
         startTime: Date.now(),
         lastAssistantItem: null,
@@ -239,6 +263,33 @@ Delivery: Speak clearly with refined pronunciation, slight British accent in cad
           instructions = await this.getVoiceInstructions(user);
         }
 
+        // Inject briefing context if available
+        if (session.briefing) {
+          const briefingContext = `
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CALL BRIEFING (Context from Strategic Planning System):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+You're calling because: ${session.briefing.trigger_reason}
+
+Behavioral patterns I've observed:
+${session.briefing.detected_patterns.map(p => `• ${p}`).join('\n')}
+
+Your conversation goals for this call:
+${session.briefing.conversation_goals.map(g => `• ${g}`).join('\n')}
+
+Recent context to keep in mind:
+${session.briefing.recent_context}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Use this context to have a focused, personalized conversation. Reference the patterns and context naturally in your conversation. Make sure to address the goals.`;
+
+          instructions += briefingContext;
+          console.log('[BRIEFING] ✓ Injected briefing into system prompt');
+        }
+
         const sessionConfig = {
           type: 'session.update',
           session: {
@@ -333,6 +384,51 @@ Delivery: Speak clearly with refined pronunciation, slight British accent in cad
           console.error('[VOICESERVICE] Failed to save interaction to Supabase:', insertError);
         } else {
           console.log('[VOICESERVICE] ✓ Interaction saved to Supabase:', interaction.id);
+        }
+
+        // Link to call_session or create new session
+        if (interaction) {
+          if (session.sessionId) {
+            // OUTBOUND CALL: Update existing session with interaction_id
+            const { error: updateError } = await supabase
+              .from('call_sessions')
+              .update({
+                interaction_id: interaction.id,
+                status: 'completed',
+                completed_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', session.sessionId);
+
+            if (updateError) {
+              console.error(`[CALL_SESSION] Error linking interaction to session ${session.sessionId}:`, updateError);
+            } else {
+              console.log(`[CALL_SESSION] ✓ Linked interaction ${interaction.id} to session ${session.sessionId}`);
+            }
+          } else {
+            // INBOUND CALL: Create new call_session
+            const { data: newSession, error: createError } = await supabase
+              .from('call_sessions')
+              .insert({
+                user_id: userId,
+                direction: 'inbound',
+                call_type: customMode === 'user-initiated' ? 'user-initiated' : (customMode || 'voice_inbound'),
+                status: 'completed',
+                interaction_id: interaction.id,
+                started_at: new Date(session.startTime).toISOString(),
+                completed_at: new Date().toISOString(),
+                scheduled_by: null,
+                briefing: null // No briefing for user-initiated calls
+              })
+              .select()
+              .single();
+
+            if (createError) {
+              console.error('[CALL_SESSION] Error creating inbound call session:', createError);
+            } else {
+              console.log(`[CALL_SESSION] ✓ Created inbound call session: ${newSession.id}`);
+            }
+          }
         }
 
         // Trigger Claude SDK orchestrator for autonomous analysis (async, non-blocking)

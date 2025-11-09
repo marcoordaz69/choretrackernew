@@ -38,8 +38,9 @@ module.exports = function(app) {
           const customParams = data.start?.customParameters || {};
           userId = customParams.userId;
           const customMode = customParams.customMode;
+          const sessionId = customParams.sessionId;
 
-          console.log('Extracted parameters:', { userId, callSid, streamSid, customMode });
+          console.log('Extracted parameters:', { userId, callSid, streamSid, customMode, sessionId });
 
           if (!userId || !callSid || !streamSid) {
             console.error('Missing userId, callSid, or streamSid in start message');
@@ -47,8 +48,8 @@ module.exports = function(app) {
             return;
           }
 
-          // Initialize voice service with these parameters INCLUDING streamSid and customMode
-          await voiceService.handleVoiceStream(ws, userId, callSid, streamSid, customMode);
+          // Initialize voice service with these parameters INCLUDING streamSid, customMode, and sessionId
+          await voiceService.handleVoiceStream(ws, userId, callSid, streamSid, customMode, sessionId);
         }
       } catch (error) {
         console.error('Error processing WebSocket message:', error);
