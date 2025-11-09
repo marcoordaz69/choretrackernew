@@ -126,8 +126,14 @@ class VoiceService {
         // Send session configuration (GA format) with dynamic user context
         let instructions;
 
-        // Handle scolding modes with dynamic topics
-        if (customMode && customMode.startsWith('scolding:')) {
+        // CRITICAL: If briefing exists, use generic instructions (briefing will provide ALL context)
+        // This prevents hardcoded mode instructions from overriding the briefing
+        if (briefing) {
+          console.log('[BRIEFING] Using generic instructions (briefing will provide specific context)');
+          instructions = `You are Luna, ${user.name}'s personal assistant. You're calling for an important conversation.
+
+Be conversational, direct, and emotionally engaged. This is a personal call that matters.`;
+        } else if (customMode && customMode.startsWith('scolding:')) {
           const topic = customMode.replace('scolding:', '');
 
           // Scolding configuration map - add new topics here
