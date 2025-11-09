@@ -215,6 +215,72 @@ export const choreTrackerServer = createSdkMcpServer({
           };
         }
       }
+    ),
+    tool(
+      'update_call_outcome',
+      'Update call session with summary and outcome assessment after call completes',
+      {
+        sessionId: z.string().uuid().optional().describe('Call session ID (if known)'),
+        interactionId: z.string().uuid().optional().describe('Interaction ID (alternative lookup)'),
+        summary: z.string().describe('2-3 sentence summary of conversation: key points, commitments, emotional state'),
+        outcome: z.object({
+          goal_achieved: z.boolean().describe('Whether the conversation goals were accomplished'),
+          effectiveness: z.enum(['high', 'medium', 'low']).describe('How effective was this intervention'),
+          follow_up_needed: z.boolean().describe('Does this call require a follow-up'),
+          follow_up_action: z.string().optional().describe('What follow-up action to take'),
+          user_satisfaction: z.number().min(1).max(5).optional().describe('Estimated user satisfaction (1-5)')
+        }).describe('Structured outcome assessment')
+      },
+      async (args) => {
+        try {
+          const { sessionId, interactionId, summary, outcome } = args;
+
+          // Must provide at least one identifier
+          if (!sessionId && !interactionId) {
+            throw new Error('Must provide either sessionId or interactionId');
+          }
+
+          // Build where clause based on what's provided
+          const whereClause = sessionId
+            ? { id: sessionId }
+            : { interaction_id: interactionId };
+
+          const { data, error } = await supabase
+            .from('call_sessions')
+            .update({
+              conversation_summary: summary,
+              outcome_assessment: outcome,
+              updated_at: new Date().toISOString()
+            })
+            .match(whereClause)
+            .select()
+            .single();
+
+          if (error) {
+            console.error('Error updating call outcome:', error);
+            throw new Error(`Failed to update call session: ${error.message}`);
+          }
+
+          console.log(`✓ Call session ${data.id} updated with outcome`);
+          console.log(`  Effectiveness: ${outcome.effectiveness}`);
+          console.log(`  Goal achieved: ${outcome.goal_achieved}`);
+
+          return {
+            content: [{
+              type: 'text',
+              text: `Call outcome updated successfully!\n\nSession ID: ${data.id}\nSummary: ${summary}\n\nOutcome:\n- Goal achieved: ${outcome.goal_achieved}\n- Effectiveness: ${outcome.effectiveness}\n- Follow-up needed: ${outcome.follow_up_needed}`
+            }]
+          };
+        } catch (error) {
+          console.error('Error in update_call_outcome:', error);
+          return {
+            content: [{
+              type: 'text',
+              text: `✗ Failed to update call outcome: ${error.message}`
+            }]
+          };
+        }
+      }
     )
   ]
 });
