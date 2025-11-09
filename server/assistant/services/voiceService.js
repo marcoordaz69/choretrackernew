@@ -952,9 +952,9 @@ Example:
     try {
       // Import Claude orchestrator components
       const path = require('path');
-      // __dirname is /home/tradedad/choretrackernew/server/assistant/services
-      // We need to go up 3 levels to reach /home/tradedad/choretrackernew
-      const orchestratorPath = path.join(__dirname, '../../../.worktrees/claude-sdk-orchestration/server/claude-orchestrator');
+      // __dirname is /app/server/assistant/services (production) or /home/tradedad/choretrackernew/server/assistant/services (dev)
+      // We need to go up 2 levels to reach /app/server or /home/tradedad/choretrackernew/server
+      const orchestratorPath = path.join(__dirname, '../../claude-orchestrator');
 
       // Lazy load to avoid startup dependencies
       const { processCallCompletion } = await import(`${orchestratorPath}/processors/callCompletionProcessor.js`);
