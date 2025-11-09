@@ -22,29 +22,83 @@ export async function processCallCompletion(interaction, mcpServers) {
   console.log(`[PROCESSOR] User: ${user_id}`);
   console.log(`[PROCESSOR] Call type: ${call_type}`);
 
+  // Find associated call_session (if exists)
+  const { data: callSession, error: sessionError } = await supabase
+    .from('call_sessions')
+    .select('*')
+    .eq('interaction_id', id)
+    .maybeSingle();
+
+  if (sessionError) {
+    console.error('[PROCESSOR] Error querying call_sessions:', sessionError);
+  }
+
+  if (callSession) {
+    console.log(`[PROCESSOR] Found call session: ${callSession.id}`);
+    if (callSession.briefing) {
+      console.log(`[PROCESSOR] Session has briefing: ${callSession.briefing.trigger_reason}`);
+    }
+  }
+
   // Get or create session for this user
   const sessionId = await sessionManager.getOrCreateSession(user_id);
 
   // Build streaming prompt with context
   async function* contextGenerator() {
+    let briefingContext = '';
+
+    if (callSession?.briefing) {
+      briefingContext = `
+ORIGINAL CALL BRIEFING (why this call was scheduled):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Trigger: ${callSession.briefing.trigger_reason}
+
+Detected Patterns:
+${callSession.briefing.detected_patterns.map(p => `  • ${p}`).join('\n')}
+
+Conversation Goals:
+${callSession.briefing.conversation_goals.map(g => `  • ${g}`).join('\n')}
+
+Recent Context:
+${callSession.briefing.recent_context}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Please assess how well the conversation achieved these original goals.
+`;
+    }
+
     yield {
       type: 'user',
       message: {
         role: 'user',
         content: `You are Luna's strategic planning system. A ${call_type} call just completed.
 
+${briefingContext}
+
 CALL TRANSCRIPT:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 "${transcript}"
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 USER ID: ${user_id}
+${callSession ? `CALL SESSION ID: ${callSession.id}` : `INTERACTION ID: ${id}`}
 
 INSTRUCTIONS:
-1. Analyze this interaction for patterns, commitments, and emotional state
-2. Determine if any proactive interventions are warranted
-3. Use your tools to schedule calls or update insights if appropriate
-4. Summarize your analysis and any actions taken
+1. Analyze this interaction for behavioral patterns, commitments, and emotional state
+2. Write a conversation_summary (2-3 sentences) covering key points and user state
+3. Assess the outcome against the original goals (if this was a scheduled call with a briefing)
+4. Determine if follow-up action is needed
+5. Use the update_call_outcome tool to save your analysis${callSession ? ` (session ID: ${callSession.id})` : ` (interaction ID: ${id})`}
+6. If follow-up is needed, use create_briefed_call to schedule it
+7. Update user insights if patterns were detected
 
-Use your available tools to take actions as needed.`
+Available tools:
+- update_call_outcome: Save your analysis
+- create_briefed_call: Schedule follow-up calls
+- update_user_insights: Record behavioral patterns
+- schedule_call: Legacy call scheduling (prefer create_briefed_call)
+
+Take action now using the appropriate tools.`
       }
     };
   }
@@ -52,7 +106,7 @@ Use your available tools to take actions as needed.`
   try {
     console.log(`[PROCESSOR] Running Claude SDK agent with session ${sessionId}`);
     console.log(`[PROCESSOR] MCP servers configured: ${mcpServers.length}`);
-    console.log(`[PROCESSOR] Tools available: schedule_call, update_user_insights`);
+    console.log(`[PROCESSOR] Tools available: update_call_outcome, create_briefed_call, update_user_insights, schedule_call`);
 
     // Run Claude SDK agent
     let analysisResult = '';
@@ -69,12 +123,15 @@ Use your available tools to take actions as needed.`
 YOU HAVE EXPLICIT PERMISSION to use all available tools WITHOUT asking. This is an automated system - there is no human to ask for permission.
 
 MANDATORY ACTIONS after each call:
-1. ALWAYS use update_user_insights to record patterns, preferences, or goals detected
-2. ALWAYS use schedule_call if user needs follow-up support
+1. ALWAYS use update_call_outcome to record the conversation summary and outcome assessment
+2. ALWAYS use update_user_insights to record patterns, preferences, or goals detected
+3. If follow-up needed, use create_briefed_call with comprehensive briefing context
 
 Available Tools (use these directly):
-- schedule_call: Schedule intervention calls (types: scolding, motivational-wakeup, task-reminder, morning-briefing, wind-down-reflection)
+- update_call_outcome: Save conversation summary and outcome assessment (goal achievement, effectiveness, follow-up needs)
+- create_briefed_call: Schedule intervention calls with strategic briefing (trigger_reason, detected_patterns, conversation_goals, recent_context)
 - update_user_insights: Record behavioral patterns, preferences, and goals
+- schedule_call: Legacy call scheduling (prefer create_briefed_call for better context)
 
 DO NOT ask for permission. DO NOT explain what you would do. JUST DO IT.`,
         maxTurns: 5,
