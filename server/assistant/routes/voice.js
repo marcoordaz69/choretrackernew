@@ -82,10 +82,10 @@ module.exports = function(app) {
   /**
    * POST /custom-scolding
    * TwiML for custom scolding call with override instructions
-   * Query params: userId, mode (e.g., "scolding:laundry", "scolding:gym")
+   * Query params: userId, mode (e.g., "scolding:laundry", "scolding:gym"), sessionId
    */
   router.post('/custom-scolding', (req, res) => {
-    const { userId, mode } = req.query;
+    const { userId, mode, sessionId } = req.query;
 
     const websocketUrl = `wss://${req.get('host')}/assistant/voice/stream`;
 
@@ -97,7 +97,8 @@ module.exports = function(app) {
       "We need to talk.",
       userId,
       req.body.CallSid,
-      customMode
+      customMode,
+      sessionId
     );
 
     res.type('text/xml').send(twiml);
@@ -108,7 +109,7 @@ module.exports = function(app) {
    * TwiML for motivational morning wake-up calls
    */
   router.post('/motivational-wakeup', (req, res) => {
-    const { userId } = req.query;
+    const { userId, sessionId } = req.query;
 
     const websocketUrl = `wss://${req.get('host')}/assistant/voice/stream`;
 
@@ -117,7 +118,8 @@ module.exports = function(app) {
       "Good morning! Rise and shine!",
       userId,
       req.body.CallSid,
-      'motivational-wakeup'
+      'motivational-wakeup',
+      sessionId
     );
 
     res.type('text/xml').send(twiml);
@@ -128,7 +130,7 @@ module.exports = function(app) {
    * TwiML for task reminder calls
    */
   router.post('/task-reminder', (req, res) => {
-    const { userId, taskId } = req.query;
+    const { userId, taskId, sessionId } = req.query;
 
     const websocketUrl = `wss://${req.get('host')}/assistant/voice/stream`;
 
@@ -137,7 +139,8 @@ module.exports = function(app) {
       "Hey! I'm calling to remind you about a task.",
       userId,
       req.body.CallSid,
-      `task-reminder:${taskId}`
+      `task-reminder:${taskId}`,
+      sessionId
     );
 
     res.type('text/xml').send(twiml);
@@ -148,7 +151,7 @@ module.exports = function(app) {
    * TwiML for evening briefing about tomorrow morning
    */
   router.post('/morning-briefing', (req, res) => {
-    const { userId } = req.query;
+    const { userId, sessionId } = req.query;
 
     const websocketUrl = `wss://${req.get('host')}/assistant/voice/stream`;
 
@@ -157,7 +160,8 @@ module.exports = function(app) {
       "Good evening! I'm calling to brief you on tomorrow.",
       userId,
       req.body.CallSid,
-      'morning-briefing'
+      'morning-briefing',
+      sessionId
     );
 
     res.type('text/xml').send(twiml);
@@ -168,7 +172,7 @@ module.exports = function(app) {
    * TwiML for evening wind-down reflection
    */
   router.post('/wind-down-reflection', (req, res) => {
-    const { userId } = req.query;
+    const { userId, sessionId } = req.query;
 
     const websocketUrl = `wss://${req.get('host')}/assistant/voice/stream`;
 
@@ -177,7 +181,8 @@ module.exports = function(app) {
       "Hey, time to wind down. How was your day?",
       userId,
       req.body.CallSid,
-      'wind-down-reflection'
+      'wind-down-reflection',
+      sessionId
     );
 
     res.type('text/xml').send(twiml);

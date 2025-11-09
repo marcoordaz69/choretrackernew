@@ -95,7 +95,7 @@ class TwilioService {
    * @param {string} greeting - Greeting message
    * @returns {string} - TwiML XML
    */
-  generateAIVoiceTwiML(websocketUrl, greeting = "Hey! I'm here. What's on your mind?", userId = null, callSid = null, customMode = null) {
+  generateAIVoiceTwiML(websocketUrl, greeting = "Hey! I'm here. What's on your mind?", userId = null, callSid = null, customMode = null, sessionId = null) {
     const response = new VoiceResponse();
 
     // No pre-recorded greeting - let AI speak directly
@@ -117,6 +117,9 @@ class TwilioService {
     }
     if (customMode) {
       stream.parameter({ name: 'customMode', value: customMode });
+    }
+    if (sessionId) {
+      stream.parameter({ name: 'sessionId', value: sessionId });
     }
 
     return response.toString();
