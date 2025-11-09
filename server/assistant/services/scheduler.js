@@ -509,19 +509,19 @@ class Scheduler {
           let webhookUrl;
           switch (session.call_type) {
             case 'motivational-wakeup':
-              webhookUrl = `${baseUrl}/assistant/voice/motivational-wakeup?sessionId=${session.id}`;
+              webhookUrl = `${baseUrl}/assistant/voice/motivational-wakeup?userId=${session.user_id}&sessionId=${session.id}`;
               break;
             case 'scolding':
-              webhookUrl = `${baseUrl}/assistant/voice/custom-scolding?sessionId=${session.id}`;
+              webhookUrl = `${baseUrl}/assistant/voice/custom-scolding?userId=${session.user_id}&sessionId=${session.id}`;
               break;
             case 'morning-briefing':
-              webhookUrl = `${baseUrl}/assistant/voice/morning-briefing?sessionId=${session.id}`;
+              webhookUrl = `${baseUrl}/assistant/voice/morning-briefing?userId=${session.user_id}&sessionId=${session.id}`;
               break;
             case 'task-reminder':
-              webhookUrl = `${baseUrl}/assistant/voice/task-reminder?sessionId=${session.id}`;
+              webhookUrl = `${baseUrl}/assistant/voice/task-reminder?userId=${session.user_id}&sessionId=${session.id}`;
               break;
             case 'wind-down-reflection':
-              webhookUrl = `${baseUrl}/assistant/voice/wind-down-reflection?sessionId=${session.id}`;
+              webhookUrl = `${baseUrl}/assistant/voice/wind-down-reflection?userId=${session.user_id}&sessionId=${session.id}`;
               break;
             default:
               console.error(`   ✗ Unknown call type: ${session.call_type}`);
