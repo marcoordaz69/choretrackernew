@@ -444,126 +444,106 @@ class Scheduler {
 
   /**
    * Process Claude orchestrator scheduled calls from Supabase
-   * Reads from scheduled_calls table and makes voice calls via Twilio
+   * Reads from call_sessions table and makes voice calls via Twilio
    */
   async processOrchestratorScheduledCalls() {
     try {
       const now = new Date();
 
-      // Query Supabase for pending calls that are due
-      const { data: scheduledCalls, error } = await supabase
-        .from('scheduled_calls')
+      // Query call_sessions instead of scheduled_calls
+      const { data: sessions, error } = await supabase
+        .from('call_sessions')
         .select('*')
-        .eq('status', 'pending')
+        .eq('status', 'scheduled')
+        .eq('direction', 'outbound')
         .lte('scheduled_for', now.toISOString())
         .order('scheduled_for', { ascending: true });
 
       if (error) {
-        console.error('Error fetching orchestrator scheduled calls:', error);
+        console.error('Error querying call_sessions:', error);
         return;
       }
 
-      if (!scheduledCalls || scheduledCalls.length === 0) {
-        return; // No calls due
+      if (!sessions || sessions.length === 0) {
+        return;
       }
 
       console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-      console.log(`🤖 ORCHESTRATOR: ${scheduledCalls.length} scheduled call(s) due`);
+      console.log(`🤖 ORCHESTRATOR: ${sessions.length} scheduled call(s) due`);
       console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
-      for (const call of scheduledCalls) {
+      for (const session of sessions) {
         try {
           console.log(`\n📞 Executing orchestrator call:`);
-          console.log(`   Call ID: ${call.id}`);
-          console.log(`   User ID: ${call.user_id}`);
-          console.log(`   Type: ${call.call_type}`);
-          console.log(`   Scheduled: ${call.scheduled_for}`);
-          console.log(`   Custom Instructions: ${call.custom_instructions || 'None'}`);
+          console.log(`   Session ID: ${session.id}`);
+          console.log(`   User ID: ${session.user_id}`);
+          console.log(`   Type: ${session.call_type}`);
+          console.log(`   Scheduled: ${session.scheduled_for}`);
+          if (session.briefing?.trigger_reason) {
+            console.log(`   Reason: ${session.briefing.trigger_reason}`);
+          }
 
-          // Get user phone from MongoDB (still need this for Twilio)
-          const user = await User.findById(call.user_id);
+          // Get user phone from MongoDB
+          const user = await User.findById(session.user_id);
           if (!user) {
-            console.error(`   ✗ User not found: ${call.user_id}`);
-            await supabase
-              .from('scheduled_calls')
-              .update({
-                status: 'failed',
-                completed_at: now.toISOString(),
-                updated_at: now.toISOString()
-              })
-              .eq('id', call.id);
+            console.error(`   ✗ User not found for session ${session.id}`);
+            await this.markSessionFailed(session.id, 'User not found in database');
+            continue;
+          }
+
+          if (!user.phone) {
+            console.error(`   ✗ No phone number for user ${session.user_id}`);
+            await this.markSessionFailed(session.id, 'User has no phone number');
             continue;
           }
 
           console.log(`   User: ${user.name} (${user.phone})`);
 
-          // Build webhook URL based on call type
+          // Build webhook URL with sessionId (KEY CHANGE!)
           const domain = process.env.DOMAIN || 'https://choretrackernew-production.up.railway.app';
           const baseUrl = domain.startsWith('http') ? domain : `https://${domain}`;
 
           let webhookUrl;
-          switch (call.call_type) {
+          switch (session.call_type) {
             case 'motivational-wakeup':
-              webhookUrl = `${baseUrl}/assistant/voice/motivational-wakeup?userId=${user.id}`;
-              break;
-            case 'wind-down-reflection':
-              webhookUrl = `${baseUrl}/assistant/voice/wind-down-reflection?userId=${user.id}`;
-              break;
-            case 'morning-briefing':
-              webhookUrl = `${baseUrl}/assistant/voice/morning-briefing?userId=${user.id}`;
-              break;
-            case 'task-reminder':
-              // Custom instructions should contain taskId
-              const taskId = call.custom_instructions;
-              webhookUrl = `${baseUrl}/assistant/voice/task-reminder?userId=${user.id}&taskId=${taskId}`;
+              webhookUrl = `${baseUrl}/assistant/voice/motivational-wakeup?sessionId=${session.id}`;
               break;
             case 'scolding':
-              // Custom instructions should contain topic (e.g., "laundry", "gym")
-              const topic = call.custom_instructions || 'general';
-              webhookUrl = `${baseUrl}/assistant/voice/scolding?userId=${user.id}&topic=${topic}`;
+              webhookUrl = `${baseUrl}/assistant/voice/scolding?sessionId=${session.id}`;
+              break;
+            case 'morning-briefing':
+              webhookUrl = `${baseUrl}/assistant/voice/morning-briefing?sessionId=${session.id}`;
+              break;
+            case 'task-reminder':
+              webhookUrl = `${baseUrl}/assistant/voice/task-reminder?sessionId=${session.id}`;
+              break;
+            case 'wind-down-reflection':
+              webhookUrl = `${baseUrl}/assistant/voice/wind-down?sessionId=${session.id}`;
               break;
             default:
-              console.error(`   ✗ Unknown call type: ${call.call_type}`);
-              await supabase
-                .from('scheduled_calls')
-                .update({
-                  status: 'failed',
-                  completed_at: now.toISOString(),
-                  updated_at: now.toISOString()
-                })
-                .eq('id', call.id);
+              console.error(`   ✗ Unknown call type: ${session.call_type}`);
+              await this.markSessionFailed(session.id, `Unknown call type: ${session.call_type}`);
               continue;
           }
 
-          // Make the call
+          // Update status to in-progress BEFORE making call
+          await supabase
+            .from('call_sessions')
+            .update({
+              status: 'in-progress',
+              started_at: now.toISOString(),
+              updated_at: now.toISOString()
+            })
+            .eq('id', session.id);
+
+          // Make the Twilio call
           await twilioService.makeCall(user.phone, webhookUrl);
 
-          console.log(`   ✓ Call initiated successfully`);
-
-          // Mark as completed
-          await supabase
-            .from('scheduled_calls')
-            .update({
-              status: 'completed',
-              completed_at: now.toISOString(),
-              updated_at: now.toISOString()
-            })
-            .eq('id', call.id);
-
-          console.log(`   ✓ Status updated to completed`);
+          console.log(`   ✓ Call initiated successfully for session ${session.id}`);
 
         } catch (callError) {
-          console.error(`   ✗ Error executing call ${call.id}:`, callError.message);
-
-          // Mark as failed
-          await supabase
-            .from('scheduled_calls')
-            .update({
-              status: 'failed',
-              completed_at: now.toISOString(),
-              updated_at: now.toISOString()
-            })
-            .eq('id', call.id);
+          console.error(`   ✗ Error executing session ${session.id}:`, callError.message);
+          await this.markSessionFailed(session.id, callError.message);
         }
       }
 
@@ -571,6 +551,33 @@ class Scheduler {
 
     } catch (error) {
       console.error('Error in processOrchestratorScheduledCalls:', error);
+    }
+  }
+
+  /**
+   * Mark a call session as failed
+   * @param {string} sessionId - Call session ID
+   * @param {string} reason - Failure reason
+   */
+  async markSessionFailed(sessionId, reason) {
+    try {
+      await supabase
+        .from('call_sessions')
+        .update({
+          status: 'failed',
+          completed_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          outcome_assessment: {
+            error: reason,
+            goal_achieved: false,
+            effectiveness: 'low'
+          }
+        })
+        .eq('id', sessionId);
+
+      console.log(`   ✗ Session ${sessionId} marked as failed: ${reason}`);
+    } catch (error) {
+      console.error(`   ✗ Error marking session ${sessionId} as failed:`, error);
     }
   }
 }
