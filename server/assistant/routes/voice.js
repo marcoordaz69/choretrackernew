@@ -88,6 +88,7 @@ module.exports = function(app) {
    */
   router.post('/custom-scolding', (req, res) => {
     const { userId, mode, sessionId } = req.query;
+    console.log(`[VOICE ROUTE] custom-scolding - Received sessionId: ${sessionId}, userId: ${userId}, mode: ${mode}`);
 
     const websocketUrl = `wss://${req.get('host')}/assistant/voice/stream`;
 
@@ -112,6 +113,7 @@ module.exports = function(app) {
    */
   router.post('/motivational-wakeup', (req, res) => {
     const { userId, sessionId } = req.query;
+    console.log(`[VOICE ROUTE] motivational-wakeup - Received sessionId: ${sessionId}, userId: ${userId}`);
 
     const websocketUrl = `wss://${req.get('host')}/assistant/voice/stream`;
 
@@ -133,6 +135,7 @@ module.exports = function(app) {
    */
   router.post('/task-reminder', (req, res) => {
     const { userId, taskId, sessionId } = req.query;
+    console.log(`[VOICE ROUTE] task-reminder - Received sessionId: ${sessionId}, userId: ${userId}, taskId: ${taskId}`);
 
     const websocketUrl = `wss://${req.get('host')}/assistant/voice/stream`;
 
@@ -154,6 +157,7 @@ module.exports = function(app) {
    */
   router.post('/morning-briefing', (req, res) => {
     const { userId, sessionId } = req.query;
+    console.log(`[VOICE ROUTE] morning-briefing - Received sessionId: ${sessionId}, userId: ${userId}`);
 
     const websocketUrl = `wss://${req.get('host')}/assistant/voice/stream`;
 
@@ -175,6 +179,7 @@ module.exports = function(app) {
    */
   router.post('/wind-down-reflection', (req, res) => {
     const { userId, sessionId } = req.query;
+    console.log(`[VOICE ROUTE] wind-down-reflection - Received sessionId: ${sessionId}, userId: ${userId}`);
 
     const websocketUrl = `wss://${req.get('host')}/assistant/voice/stream`;
 
