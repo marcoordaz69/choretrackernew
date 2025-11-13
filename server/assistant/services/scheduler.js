@@ -471,21 +471,6 @@ class Scheduler {
         return;
       }
 
-      // Enhanced logging for debugging
-      sessions.forEach(session => {
-        console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-        console.log(`[SCHEDULER] Session ${session.id}`);
-        console.log(`[SCHEDULER]   Type: ${session.call_type}`);
-        console.log(`[SCHEDULER]   User: ${session.user_id}`);
-        console.log(`[SCHEDULER]   Scheduled: ${session.scheduled_for}`);
-        console.log(`[SCHEDULER]   Has Briefing: ${!!session.briefing}`);
-        if (session.briefing) {
-          console.log(`[SCHEDULER]   Trigger: ${session.briefing.trigger_reason}`);
-          console.log(`[SCHEDULER]   Goals: ${session.briefing.conversation_goals?.join(', ')}`);
-        }
-        console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-      });
-
       console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
       console.log(`🤖 ORCHESTRATOR: ${sessions.length} scheduled call(s) due`);
       console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
@@ -497,8 +482,10 @@ class Scheduler {
           console.log(`   User ID: ${session.user_id}`);
           console.log(`   Type: ${session.call_type}`);
           console.log(`   Scheduled: ${session.scheduled_for}`);
-          if (session.briefing?.trigger_reason) {
-            console.log(`   Reason: ${session.briefing.trigger_reason}`);
+          console.log(`   Has Briefing: ${!!session.briefing}`);
+          if (session.briefing) {
+            console.log(`   Briefing Trigger: ${session.briefing.trigger_reason}`);
+            console.log(`   Briefing Goals: ${session.briefing.conversation_goals?.join(', ') || 'none'}`);
           }
 
           // Get user phone from MongoDB
