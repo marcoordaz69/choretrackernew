@@ -222,6 +222,145 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Diagnostic endpoint to debug Railway environment
+app.get('/debug/env', async (req, res) => {
+  const { execSync } = require('child_process');
+  const fs = require('fs');
+  const path = require('path');
+
+  const diagnostics = {};
+
+  try {
+    // 1. Node.js version
+    try {
+      diagnostics.nodeVersion = execSync('node --version', { encoding: 'utf8' }).trim();
+    } catch (error) {
+      diagnostics.nodeVersion = { error: error.message };
+    }
+
+    // 2. Working directory
+    diagnostics.workingDirectory = process.cwd();
+
+    // 3. PATH
+    diagnostics.pathDirectories = process.env.PATH.split(':');
+
+    // 4. Check local claude CLI
+    const localClaudePath = path.join(process.cwd(), 'node_modules', '.bin', 'claude');
+    try {
+      const exists = fs.existsSync(localClaudePath);
+      const stats = exists ? fs.lstatSync(localClaudePath) : null;
+
+      diagnostics.localClaude = {
+        exists,
+        path: localClaudePath,
+        type: stats ? (stats.isSymbolicLink() ? 'symlink' : 'file') : null
+      };
+
+      if (exists && stats.isSymbolicLink()) {
+        const target = fs.readlinkSync(localClaudePath);
+        const targetPath = path.resolve(path.dirname(localClaudePath), target);
+        diagnostics.localClaude.linkTarget = target;
+        diagnostics.localClaude.resolvedPath = targetPath;
+        diagnostics.localClaude.targetExists = fs.existsSync(targetPath);
+      }
+
+      if (exists) {
+        try {
+          fs.accessSync(localClaudePath, fs.constants.X_OK);
+          diagnostics.localClaude.executable = true;
+        } catch {
+          diagnostics.localClaude.executable = false;
+        }
+      }
+    } catch (error) {
+      diagnostics.localClaude = { error: error.message };
+    }
+
+    // 5. Check package installation
+    const packagePath = path.join(process.cwd(), 'node_modules', '@anthropic-ai', 'claude-code');
+    try {
+      diagnostics.claudeCodePackage = {
+        exists: fs.existsSync(packagePath),
+        path: packagePath
+      };
+
+      if (diagnostics.claudeCodePackage.exists) {
+        const cliPath = path.join(packagePath, 'cli.js');
+        diagnostics.claudeCodePackage.cliExists = fs.existsSync(cliPath);
+
+        const pkgJsonPath = path.join(packagePath, 'package.json');
+        if (fs.existsSync(pkgJsonPath)) {
+          const pkg = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf8'));
+          diagnostics.claudeCodePackage.version = pkg.version;
+        }
+      }
+    } catch (error) {
+      diagnostics.claudeCodePackage = { error: error.message };
+    }
+
+    // 6. Try to run claude
+    try {
+      const result = execSync(`"${localClaudePath}" --version 2>&1`, {
+        encoding: 'utf8',
+        timeout: 5000
+      });
+      diagnostics.claudeExecution = {
+        success: true,
+        output: result.trim()
+      };
+    } catch (error) {
+      diagnostics.claudeExecution = {
+        success: false,
+        exitCode: error.status,
+        output: error.stdout || error.stderr || error.message
+      };
+    }
+
+    // 7. Check ANTHROPIC_API_KEY
+    if (process.env.ANTHROPIC_API_KEY) {
+      const key = process.env.ANTHROPIC_API_KEY;
+      diagnostics.anthropicApiKey = {
+        set: true,
+        masked: key.substring(0, 12) + '...' + key.substring(key.length - 8),
+        length: key.length
+      };
+    } else {
+      diagnostics.anthropicApiKey = { set: false };
+    }
+
+    // 8. Which command
+    try {
+      const which = execSync('which claude 2>&1', { encoding: 'utf8' }).trim();
+      diagnostics.whichClaude = which;
+    } catch {
+      diagnostics.whichClaude = 'not found';
+    }
+
+    // 9. @anthropic-ai packages
+    const anthropicDir = path.join(process.cwd(), 'node_modules', '@anthropic-ai');
+    try {
+      if (fs.existsSync(anthropicDir)) {
+        diagnostics.anthropicPackages = fs.readdirSync(anthropicDir);
+      } else {
+        diagnostics.anthropicPackages = 'directory not found';
+      }
+    } catch (error) {
+      diagnostics.anthropicPackages = { error: error.message };
+    }
+
+    res.json({
+      timestamp: new Date().toISOString(),
+      diagnostics
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: 'Diagnostic failed',
+      message: error.message,
+      stack: error.stack
+    });
+  }
+});
+
 // Supabase PostgreSQL connection
 console.log('Testing Supabase connection...');
 testConnection()
