@@ -201,7 +201,8 @@ NODE_ENV=development
 - Context summary stored in JSONB
 
 ### MCP Tools
-- `schedule_call`: 5 call types (motivational-wakeup, wind-down-reflection, task-reminder, accountability-checkin, emergency-intervention)
+- `update_call_outcome`: Save conversation summary and outcome assessment after calls
+- `create_briefed_call`: Schedule intervention calls with strategic briefing context
 - `update_user_insights`: Merge new patterns/preferences into user insights JSONB
 
 ## Recommended Next Steps
