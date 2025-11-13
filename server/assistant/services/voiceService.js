@@ -412,14 +412,16 @@ Use this context to have a focused, personalized conversation. Reference the pat
         if (!session.sessionId && interaction) {
           console.log('[VOICE] No sessionId provided - creating inbound session');
 
+          const now = new Date().toISOString();
           const { data: newSession, error: sessionError } = await supabase
             .from('call_sessions')
             .insert({
               user_id: userId,
               direction: 'inbound',
               call_type: customMode === 'user-initiated' ? 'user-initiated' : (customMode || 'voice_inbound'),
-              status: 'in-progress',
+              status: 'completed',
               started_at: new Date(session.startTime).toISOString(),
+              completed_at: now,
               scheduled_by: null,
               briefing: null
             })
@@ -428,26 +430,34 @@ Use this context to have a focused, personalized conversation. Reference the pat
 
           if (sessionError) {
             console.error('[VOICE] Error creating inbound session:', sessionError);
-          } else if (newSession) {
-            session.sessionId = newSession.id;
-            console.log(`[VOICE] Created inbound session: ${session.sessionId}`);
+            // Don't continue if session creation failed
+            return;
           }
+
+          if (!newSession) {
+            console.error('[VOICE] Session creation succeeded but no data returned');
+            return;
+          }
+
+          session.sessionId = newSession.id;
+          console.log(`[VOICE] Created inbound session: ${session.sessionId}`);
         }
 
         // Link interaction to session
         if (session.sessionId && interaction) {
-          const { error: linkError } = await supabase
+          const { data: updateData, error: linkError } = await supabase
             .from('call_sessions')
             .update({
               interaction_id: interaction.id,
-              status: 'completed',
-              completed_at: new Date().toISOString(),
               updated_at: new Date().toISOString()
             })
-            .eq('id', session.sessionId);
+            .eq('id', session.sessionId)
+            .select();
 
           if (linkError) {
             console.error(`[VOICE] Error linking interaction to session:`, linkError);
+          } else if (!updateData || updateData.length === 0) {
+            console.error(`[VOICE] No rows updated when linking interaction to session ${session.sessionId}`);
           } else {
             console.log(`[VOICE] ✓ Linked interaction ${interaction.id} to session ${session.sessionId}`);
           }
