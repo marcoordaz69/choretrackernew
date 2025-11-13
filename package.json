@@ -13,6 +13,7 @@
     "install": "npm run install-server && npm run install-client",
     "build": "cd client && npm run build",
     "heroku-postbuild": "cd client && npm install && npm run build",
+    "postinstall": "npm install -g @anthropic-ai/claude-code || true",
     "assistant:start": "node server/assistant-server.js",
     "assistant:dev": "nodemon server/assistant-server.js",
     "assistant:both": "concurrently \"npm run server\" \"npm run assistant:dev\"",
