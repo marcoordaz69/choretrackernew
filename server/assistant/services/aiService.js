@@ -412,6 +412,37 @@ When you learn something new about ${user.name}, consider updating their profile
                       notes: {
                         type: 'string',
                         description: 'Any other important notes about the user'
+                      },
+                      schedule: {
+                        type: 'object',
+                        description: 'User\'s daily and weekly schedule information',
+                        properties: {
+                          weekdayRoutine: {
+                            type: 'string',
+                            description: 'Typical weekday schedule (e.g., "7am wake, 8am-12pm work, 12-1pm lunch, 1-5pm work, 6pm dinner, 11pm sleep")'
+                          },
+                          weekendRoutine: {
+                            type: 'string',
+                            description: 'Typical weekend schedule'
+                          },
+                          recurringEvents: {
+                            type: 'array',
+                            items: { type: 'string' },
+                            description: 'Recurring scheduled events (e.g., "Gym Mon/Wed/Fri 10am", "Family dinner Sunday 6pm")'
+                          },
+                          workSchedule: {
+                            type: 'string',
+                            description: 'Work or shift schedule details'
+                          },
+                          sleepSchedule: {
+                            type: 'string',
+                            description: 'Sleep and wake times'
+                          },
+                          notes: {
+                            type: 'string',
+                            description: 'Any additional schedule-related notes or preferences'
+                          }
+                        }
                       }
                     }
                   }
@@ -849,7 +880,16 @@ When you learn something new about ${user.name}, consider updating their profile
               challenges: this.mergeArrays(existingLearningData.challenges, newLearningData.challenges),
               values: this.mergeArrays(existingLearningData.values, newLearningData.values),
               motivations: this.mergeArrays(existingLearningData.motivations, newLearningData.motivations),
-              recentWins: this.mergeArrays(existingLearningData.recentWins, newLearningData.recentWins, 10) // Keep last 10 wins
+              recentWins: this.mergeArrays(existingLearningData.recentWins, newLearningData.recentWins, 10), // Keep last 10 wins
+              // Deep merge schedule object
+              schedule: newLearningData.schedule ? {
+                ...(existingLearningData.schedule || {}),
+                ...newLearningData.schedule,
+                recurringEvents: this.mergeArrays(
+                  existingLearningData.schedule?.recurringEvents,
+                  newLearningData.schedule?.recurringEvents
+                )
+              } : existingLearningData.schedule
             };
 
             user.ai_context = {

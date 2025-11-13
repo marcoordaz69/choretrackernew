@@ -231,6 +231,143 @@ export const choreTrackerServer = createSdkMcpServer({
           };
         }
       }
+    ),
+    tool(
+      'get_user_schedule',
+      'Retrieve the user\'s stored schedule information',
+      {
+        userId: z.string().uuid().describe('UUID of the user')
+      },
+      async (args) => {
+        try {
+          const { data: user, error } = await supabase
+            .from('assistant_users')
+            .select('ai_context')
+            .eq('id', args.userId)
+            .single();
+
+          if (error) {
+            throw new Error(`Failed to fetch user: ${error.message}`);
+          }
+
+          const schedule = user?.ai_context?.learningData?.schedule;
+
+          if (!schedule) {
+            return {
+              content: [{
+                type: 'text',
+                text: 'No schedule information found for this user.'
+              }]
+            };
+          }
+
+          const scheduleText = [
+            '📅 User Schedule:',
+            '',
+            schedule.weekdayRoutine ? `Weekday Routine:\n${schedule.weekdayRoutine}` : null,
+            schedule.weekendRoutine ? `\nWeekend Routine:\n${schedule.weekendRoutine}` : null,
+            schedule.workSchedule ? `\nWork Schedule:\n${schedule.workSchedule}` : null,
+            schedule.sleepSchedule ? `\nSleep Schedule:\n${schedule.sleepSchedule}` : null,
+            schedule.recurringEvents?.length > 0 ? `\nRecurring Events:\n${schedule.recurringEvents.map(e => `  • ${e}`).join('\n')}` : null,
+            schedule.notes ? `\nNotes:\n${schedule.notes}` : null
+          ].filter(Boolean).join('\n');
+
+          return {
+            content: [{
+              type: 'text',
+              text: scheduleText
+            }]
+          };
+        } catch (error) {
+          return {
+            content: [{
+              type: 'text',
+              text: `✗ Failed to retrieve schedule: ${error.message}`
+            }]
+          };
+        }
+      }
+    ),
+    tool(
+      'update_user_schedule',
+      'Update or add to the user\'s schedule information (complements what voice agent collects)',
+      {
+        userId: z.string().uuid().describe('UUID of the user'),
+        schedule: z.object({
+          weekdayRoutine: z.string().optional().describe('Typical weekday schedule'),
+          weekendRoutine: z.string().optional().describe('Typical weekend schedule'),
+          recurringEvents: z.array(z.string()).optional().describe('Recurring events to add'),
+          workSchedule: z.string().optional().describe('Work/shift schedule'),
+          sleepSchedule: z.string().optional().describe('Sleep and wake times'),
+          notes: z.string().optional().describe('Additional schedule notes')
+        }).describe('Schedule information to update or add')
+      },
+      async (args) => {
+        try {
+          const { userId, schedule } = args;
+
+          // Fetch current user data
+          const { data: user, error: fetchError } = await supabase
+            .from('assistant_users')
+            .select('ai_context')
+            .eq('id', userId)
+            .single();
+
+          if (fetchError) {
+            throw new Error(`Failed to fetch user: ${fetchError.message}`);
+          }
+
+          const currentContext = user.ai_context || {};
+          const currentLearningData = currentContext.learningData || {};
+          const currentSchedule = currentLearningData.schedule || {};
+
+          // Merge schedule data
+          const updatedSchedule = {
+            ...currentSchedule,
+            ...schedule,
+            // Merge recurring events
+            recurringEvents: schedule.recurringEvents ? [
+              ...(currentSchedule.recurringEvents || []),
+              ...schedule.recurringEvents
+            ].filter((v, i, a) => a.indexOf(v) === i) : currentSchedule.recurringEvents
+          };
+
+          // Update user record
+          const { error: updateError } = await supabase
+            .from('assistant_users')
+            .update({
+              ai_context: {
+                ...currentContext,
+                learningData: {
+                  ...currentLearningData,
+                  schedule: updatedSchedule
+                }
+              }
+            })
+            .eq('id', userId);
+
+          if (updateError) {
+            throw new Error(`Failed to update schedule: ${updateError.message}`);
+          }
+
+          console.log(`✓ Schedule updated for user ${userId}`);
+
+          return {
+            content: [{
+              type: 'text',
+              text: `Schedule updated successfully!\n\nUpdated fields:\n${Object.keys(schedule).map(k => `  • ${k}`).join('\n')}`
+            }]
+          };
+        } catch (error) {
+          console.error('Error in update_user_schedule:', error);
+          return {
+            content: [{
+              type: 'text',
+              text: `✗ Failed to update schedule: ${error.message}`
+            }]
+          };
+        }
+      }
     )
   ]
 });
