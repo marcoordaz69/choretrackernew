@@ -96,7 +96,6 @@ Available tools:
 - update_call_outcome: Save your analysis
 - create_briefed_call: Schedule follow-up calls
 - update_user_insights: Record behavioral patterns
-- schedule_call: Legacy call scheduling (prefer create_briefed_call)
 
 Take action now using the appropriate tools.`
       }
@@ -106,7 +105,7 @@ Take action now using the appropriate tools.`
   try {
     console.log(`[PROCESSOR] Running Claude SDK agent with session ${sessionId}`);
     console.log(`[PROCESSOR] MCP servers configured: ${mcpServers.length}`);
-    console.log(`[PROCESSOR] Tools available: update_call_outcome, create_briefed_call, update_user_insights, schedule_call`);
+    console.log(`[PROCESSOR] Tools available: update_call_outcome, create_briefed_call, update_user_insights`);
 
     // Run Claude SDK agent
     let analysisResult = '';
@@ -131,7 +130,6 @@ Available Tools (use these directly):
 - update_call_outcome: Save conversation summary and outcome assessment (goal achievement, effectiveness, follow-up needs)
 - create_briefed_call: Schedule intervention calls with strategic briefing (trigger_reason, detected_patterns, conversation_goals, recent_context)
 - update_user_insights: Record behavioral patterns, preferences, and goals
-- schedule_call: Legacy call scheduling (prefer create_briefed_call for better context)
 
 DO NOT ask for permission. DO NOT explain what you would do. JUST DO IT.`,
         maxTurns: 5,
